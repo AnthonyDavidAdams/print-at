@@ -43,11 +43,23 @@ td,th{padding:8px 10px;border-top:1px solid #eceff2;text-align:left;vertical-ali
 code{font:12px ui-monospace,Menlo,monospace;background:#eef0f3;padding:1px 4px;border-radius:3px}
 button{font:12px -apple-system,system-ui;padding:3px 9px;border:1px solid #c9ced5;border-radius:6px;background:#fff;cursor:pointer}button:hover{background:#f0f2f5}
 .muted{color:#6b7480}.path{font-size:12px;color:#6b7480;margin-top:6px}
-form.inline{display:flex;gap:8px;align-items:center;margin-top:10px}input[type=text]{font:13px -apple-system,system-ui;padding:4px 8px;border:1px solid #c9ced5;border-radius:6px;min-width:220px}
+form.inline{display:flex;gap:8px;align-items:center;margin-top:10px}
+form.settings{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}form.settings label{display:flex;flex-direction:column;font-size:12px;color:#5b6573;gap:3px}form.settings label input[type=text]{min-width:0;width:100%;box-sizing:border-box}form.settings label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:#1c2430}form.settings div{grid-column:1/-1}input[type=text]{font:13px -apple-system,system-ui;padding:4px 8px;border:1px solid #c9ced5;border-radius:6px;min-width:220px}
 </style>
 <h1>Print@<sup>™</sup> console</h1>
-<div class="muted">Agent on 127.0.0.1:${cfg.port} · contact ${esc(cfg.contactName)} &lt;${esc(cfg.contactEmail)}&gt; · home ${esc(cfg.homeAddress || 'not set')}</div>
-<div class="path">Edit contact details, home address and SMTP in <code>${esc(CONFIG_PATH)}</code>. Printers also appear in System Settings › Printers &amp; Scanners.</div>
+<div class="muted">Agent on 127.0.0.1:${cfg.port}. Printers also appear in System Settings › Printers &amp; Scanners.</div>
+
+<h2>Settings</h2>
+<form method="post" action="/settings" class="settings">
+<label>Your name <input type="text" name="contactName" value="${esc(cfg.contactName)}"></label>
+<label>Email (shops reply here; also the sender) <input type="text" name="contactEmail" value="${esc(cfg.contactEmail)}"></label>
+<label>Phone (optional, goes in order emails) <input type="text" name="contactPhone" value="${esc(cfg.contactPhone)}"></label>
+<label>Home address (used when Location Services is off and your IP is nearby) <input type="text" name="homeAddress" value="${esc(cfg.homeAddress)}"></label>
+<label>Gmail app password file <input type="text" name="gmailEnv" value="${esc(cfg.gmailEnv)}"></label>
+<label>Claude model for ranking (blank = CLI default) <input type="text" name="claudeModel" value="${esc(cfg.claudeModel)}"></label>
+<label class="check"><input type="checkbox" name="ccSelf" ${cfg.ccSelf ? 'checked' : ''}> Cc me on every order email</label>
+<div><button>Save settings</button> <span class="muted">Stored in <code>${esc(CONFIG_PATH)}</code>; applies to the next job.</span></div>
+</form>
 
 <h2>Printers</h2>
 <table><tr><th>Name in Print dialog</th><th>Queue</th><th>Pinned shop</th><th>Order email</th><th>Defaults</th><th></th></tr>
@@ -93,6 +105,15 @@ function handle(req, res, cfg) {
   }
   if (req.method !== 'POST') return false;
   const back = () => { res.writeHead(303, { Location: '/' }); res.end(); };
+  if (url === '/settings') return form(req, f => {
+    const cur = readJson(CONFIG_PATH, {});
+    for (const k of ['contactName', 'contactEmail', 'contactPhone', 'homeAddress', 'gmailEnv', 'claudeModel']) if (k in f) cur[k] = (f[k] || '').trim();
+    cur.ccSelf = !!f.ccSelf;
+    if (cur.contactEmail && !cur.smtpUser) cur.smtpUser = cur.contactEmail;
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(cur, null, 2));
+    log('console: settings saved');
+    back();
+  }), true;
   if (url === '/printers/remove') return form(req, f => { if (f.queue && f.queue !== 'PrintAt') { spawnSync('/usr/sbin/lpadmin', ['-x', f.queue]); log(`console: removed printer ${f.queue}`); } back(); }), true;
   if (url === '/printers/add') return form(req, f => {
     if (f.shop) { const r = spawnSync(path.join(ROOT, 'printat-add'), [f.shop, 'Nearest', 'Confirm', f.city || '', f.email || ''], { encoding: 'utf8', env: { ...process.env, PATH: process.env.PATH + ':/usr/sbin:/sbin' } }); log(`console: add printer ${f.shop}: ${(r.stdout || r.stderr || '').trim()}`); }

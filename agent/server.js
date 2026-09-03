@@ -10,7 +10,7 @@ const ui = require('./ui');
 const panel = require('./panel');
 const console_ = require('./console');
 
-const cfg = load();
+let cfg = load();
 let queue = Promise.resolve();
 
 function b64(h) { return h ? Buffer.from(h, 'base64').toString('utf8') : ''; }
@@ -143,6 +143,7 @@ const server = http.createServer((req, res) => {
     });
     report(`Queued as job ${id}`);
 
+    cfg = load();
     queue = queue.then(() => run(job, cfg, report)).then(() => {
       log(`job ${id}: done -> ${JSON.stringify(job.result)}`);
       fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify(job, null, 2));
