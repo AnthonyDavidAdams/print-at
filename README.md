@@ -145,6 +145,12 @@ and are offered directly only when nothing automatable exists nearby.
   cc'd to you. Only addresses found on an official page are used, never guessed. The UPS
   Store's per-store `store####@theupsstore.com` pattern and PrinterOn email-to-print
   addresses count.
+- **PrinterOn**: hotel business centers, libraries and airport lounges on HP's PrinterOn
+  network each have an email-to-print address. Print@ reads the PrinterOn public directory
+  for your city (and the cities of the other candidates), resolves each printer's
+  `@printspots.com` address and color capability, and lists them as automatable shops. The
+  PDF is emailed to the printer, PrinterOn mails you a 6-digit release code, and you collect
+  it at the desk. Cached per city for a week in `printeron.json`.
 - **Your own emails**: know a store's order address the agent could not find (a local CVS,
   Walmart or Walgreens photo counter, say)? Enter it in the console next to that shop, or
   pass it when creating a pinned printer (`printat-add "CVS" Nearest Confirm Eureka
@@ -169,7 +175,8 @@ Ideas that would make this much better, in rough order:
 
 1. Drive the FedEx Office / Staples / UPS Store / Office Depot checkouts with a browser
    agent instead of opening the portal.
-2. PrinterOn discovery for hotels and airports (each printer has an email-to-print address).
+2. ePRINTit's directory (the other public-printing network) only searches by venue name;
+   a way to enumerate it by location would add more hotels and libraries.
 3. A Windows port (a port monitor plus the same agent).
 4. An iOS share-sheet version.
 

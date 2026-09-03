@@ -1,5 +1,6 @@
 'use strict';
 const { helper } = require('./locate');
+const printeron = require('./printeron');
 const { log } = require('./config');
 
 // Brand knowledge Claude gets as hints. Portal URLs are the public upload entry points.
@@ -67,7 +68,7 @@ async function findCandidates(loc, shopType, maxDistance, pin = '') {
     return !/MKPOICategory(Restaurant|Cafe|Bakery|GasStation|Pharmacy)$/.test(it.category || '') || !!chain;
   });
   items.sort((a, b) => a.distance_m - b.distance_m);
-  return items.slice(0, 15).map((it, i) => {
+  const mapped = items.slice(0, 15).map((it, i) => {
     const chain = chainFor(it.name);
     return {
       id: `s${i + 1}`,
@@ -82,6 +83,22 @@ async function findCandidates(loc, shopType, maxDistance, pin = '') {
       brand_notes: chain ? chain.notes : '',
     };
   });
+  // PrinterOn public printers (hotel business centers, libraries) come with a known
+  // email-to-print address, so they are automatable even when nothing else is.
+  if (shopType === 'Any' || shopType === 'Travel') {
+    try {
+      const radiusMi = radius / 1609;
+      const near = await printeron.findNearby(loc, mapped.map(m => m.address), radiusMi);
+      const seen = new Set(mapped.map(m => norm(m.address).slice(0, 14)));
+      let n = 0;
+      for (const p of near) {
+        if (seen.has(norm(p.address).slice(0, 14))) continue;
+        mapped.push(printeron.asCandidate(p, n++));
+      }
+      if (n) log(`printeron: added ${n} location(s)`);
+    } catch (e) { log(`printeron lookup skipped: ${e.message}`); }
+  }
+  return mapped;
 }
 
 module.exports = { findCandidates, chainFor, CHAINS };
