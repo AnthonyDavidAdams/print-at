@@ -94,7 +94,7 @@ const server = http.createServer((req, res) => {
     const dir = path.join(JOBS_DIR, id);
     fs.mkdirSync(dir, { recursive: true });
     const title = (b64(req.headers['x-np-title']) || 'Untitled').trim();
-    const safeTitle = title.replace(/[^\w.\- ]+/g, '_').slice(0, 80) || 'document';
+    const safeTitle = title.replace(/\.pdf$/i, '').replace(/[^\w.\- ]+/g, '_').slice(0, 80) || 'document';
     const pdfPath = path.join(dir, `${safeTitle}.pdf`);
     fs.writeFileSync(pdfPath, pdf);
     const printer = req.headers['x-np-printer'] || 'NearPrint';
