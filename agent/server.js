@@ -1,5 +1,5 @@
 'use strict';
-// NearPrint agent: receives jobs from the CUPS backend over localhost and runs the pipeline.
+// Print@ agent: receives jobs from the CUPS backend over localhost and runs the pipeline.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -112,9 +112,9 @@ const server = http.createServer((req, res) => {
     const safeTitle = title.replace(/\.pdf$/i, '').replace(/[^\w.\- ]+/g, '_').slice(0, 80) || 'document';
     const pdfPath = path.join(dir, `${safeTitle}.pdf`);
     fs.writeFileSync(pdfPath, pdf);
-    const printer = req.headers['x-np-printer'] || 'NearPrint';
+    const printer = req.headers['x-np-printer'] || 'PrintAt';
     const opts = { ...ppdDefaults(printer), ...parseOptions(b64(req.headers['x-np-options'])) };
-    // A queue created for one shop carries it in its device URI: nearprint://localhost/?shop=Staples
+    // A queue created for one shop carries it in its device URI: printat://localhost/?shop=Staples
     let pin = '', pinEmail = '';
     try { const u = new URL(b64(req.headers['x-np-device-uri'])); pin = u.searchParams.get('shop') || ''; pinEmail = u.searchParams.get('email') || ''; } catch {}
     const job = {
@@ -162,5 +162,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(cfg.port, '127.0.0.1', () => {
-  log(`NearPrint agent listening on 127.0.0.1:${cfg.port}${cfg.dryRun ? ' [DRY RUN]' : ''}${cfg.skipClaude ? ' [NO CLAUDE]' : ''}`);
+  log(`Print@ agent listening on 127.0.0.1:${cfg.port}${cfg.dryRun ? ' [DRY RUN]' : ''}${cfg.skipClaude ? ' [NO CLAUDE]' : ''}`);
 });

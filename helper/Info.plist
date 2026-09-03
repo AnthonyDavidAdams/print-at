@@ -2,12 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleIdentifier</key><string>io.nearprint.locate</string>
-  <key>CFBundleName</key><string>NearPrint Locate</string>
-  <key>CFBundleExecutable</key><string>nearprint-locate</string>
+  <key>CFBundleIdentifier</key><string>io.printat.locate</string>
+  <key>CFBundleName</key><string>Print@ Locate</string>
+  <key>CFBundleExecutable</key><string>printat-locate</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>NSLocationUsageDescription</key><string>NearPrint uses your location to find the closest print shop.</string>
-  <key>NSLocationWhenInUseUsageDescription</key><string>NearPrint uses your location to find the closest print shop.</string>
+  <key>NSLocationUsageDescription</key><string>Print@ uses your location to find the closest print shop.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Print@ uses your location to find the closest print shop.</string>
 </dict>
 </plist>

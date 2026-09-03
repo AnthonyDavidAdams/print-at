@@ -13,7 +13,7 @@ const readJson = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8'))
 function printers() {
   let out = '';
   try { out = execFileSync('/usr/bin/lpstat', ['-v'], { encoding: 'utf8' }); } catch { return []; }
-  return out.split('\n').map(l => l.match(/^device for (\S+): (nearprint:\/\/\S*)/)).filter(Boolean).map(m => {
+  return out.split('\n').map(l => l.match(/^device for (\S+): (printat:\/\/\S*)/)).filter(Boolean).map(m => {
     const queue = m[1];
     let info = queue, shop = '', email = '';
     try { info = (execFileSync('/usr/bin/lpstat', ['-l', '-p', queue], { encoding: 'utf8' }).match(/Description: (.*)/) || [])[1] || queue; } catch {}
@@ -53,7 +53,7 @@ form.inline{display:flex;gap:8px;align-items:center;margin-top:10px}input[type=t
 <table><tr><th>Name in Print dialog</th><th>Queue</th><th>Pinned shop</th><th>Order email</th><th>Defaults</th><th></th></tr>
 ${ps.map(p => row([`<strong>${esc(p.info)}</strong>`, `<code>${esc(p.queue)}</code>`, p.shop ? esc(p.shop) : '<span class="muted">searches nearby</span>', p.email ? esc(p.email) : '<span class="muted">found per job</span>',
   `<span class="muted">${Object.entries(p.defaults).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' · ')}</span>`,
-  p.queue === 'NearPrint' ? '' : btn('/printers/remove', { queue: p.queue }, 'Remove')])).join('')}
+  p.queue === 'PrintAt' ? '' : btn('/printers/remove', { queue: p.queue }, 'Remove')])).join('')}
 </table>
 <form class="inline" method="post" action="/printers/add"><input type="text" name="shop" placeholder="Shop name, e.g. Staples" required><input type="text" name="city" placeholder="City (optional)"><input type="text" name="email" placeholder="Order email (optional)"><button>Add printer</button></form>
 
@@ -93,9 +93,9 @@ function handle(req, res, cfg) {
   }
   if (req.method !== 'POST') return false;
   const back = () => { res.writeHead(303, { Location: '/' }); res.end(); };
-  if (url === '/printers/remove') return form(req, f => { if (f.queue && f.queue !== 'NearPrint') { spawnSync('/usr/sbin/lpadmin', ['-x', f.queue]); log(`console: removed printer ${f.queue}`); } back(); }), true;
+  if (url === '/printers/remove') return form(req, f => { if (f.queue && f.queue !== 'PrintAt') { spawnSync('/usr/sbin/lpadmin', ['-x', f.queue]); log(`console: removed printer ${f.queue}`); } back(); }), true;
   if (url === '/printers/add') return form(req, f => {
-    if (f.shop) { const r = spawnSync(path.join(ROOT, 'nearprint-add'), [f.shop, 'Nearest', 'Confirm', f.city || '', f.email || ''], { encoding: 'utf8', env: { ...process.env, PATH: process.env.PATH + ':/usr/sbin:/sbin' } }); log(`console: add printer ${f.shop}: ${(r.stdout || r.stderr || '').trim()}`); }
+    if (f.shop) { const r = spawnSync(path.join(ROOT, 'printat-add'), [f.shop, 'Nearest', 'Confirm', f.city || '', f.email || ''], { encoding: 'utf8', env: { ...process.env, PATH: process.env.PATH + ':/usr/sbin:/sbin' } }); log(`console: add printer ${f.shop}: ${(r.stdout || r.stderr || '').trim()}`); }
     back();
   }), true;
   if (url === '/memory/forget') return form(req, f => { const m = readJson(MEMORY_PATH, []); m.splice(Number(f.i), 1); fs.writeFileSync(MEMORY_PATH, JSON.stringify(m, null, 2)); back(); }), true;

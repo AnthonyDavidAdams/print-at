@@ -5,11 +5,11 @@
 A virtual printer for macOS. Pick **Print@ Nearby** in any Print dialog and the job goes to
 the closest print shop that fits your priorities instead of to a device on your desk. Once a
 shop has been used it becomes its own printer: **Print@ Staples, Eureka**, **Print@ The UPS
-Store, Eureka**. (Internal identifiers such as the `nearprint://` device URI and the
-`io.nearprint.agent` launchd label keep the old working name.)
+Store, Eureka**. (Internal identifiers such as the `printat://` device URI and the
+`io.printat.agent` launchd label keep the old working name.)
 
 ```
-Print dialog ──> CUPS ──> backend/nearprint (POST to localhost) ──> agent/server.js
+Print dialog ──> CUPS ──> backend/printat (POST to localhost) ──> agent/server.js
                                                                         │
       locate (Location Services → IP → saved address, confirm dialog)  │
       search Apple Maps for shops / chains / hotels / libraries         │
@@ -42,13 +42,13 @@ The first time a shop is actually used (order emailed, upload page opened, or ch
 find-only mode) two things happen:
 
 1. It becomes a printer of its own, **Print@ Staples, Eureka**, pinned to that shop through
-   its device URI (`nearprint://localhost/?shop=Staples`), location confirmation off, priority
+   its device URI (`printat://localhost/?shop=Staples`), location confirmation off, priority
    and delivery defaults copied from the job that created it.
 2. **Print@ Nearby** remembers it for that spot. The next job from within 1.5 miles with the
    same priority and shop type skips the search and offers that shop straight away, with a
    **Search again** button if you want a fresh look. Memories expire after 30 days.
 
-From a terminal: `~/nearprint/nearprint-add "Staples" Price Auto Eureka` (shop, priority,
+From a terminal: `~/printat/printat-add "Staples" Price Auto Eureka` (shop, priority,
 delivery, city). Remove one: `lpadmin -x PrintAt_Staples_Eureka`.
 
 Printing to a pinned queue skips the search, verifies that shop's hours, price and ordering
@@ -77,22 +77,22 @@ notification when the order has gone out.
 - Xcode Command Line Tools (`xcode-select --install`) to build the Swift location helper.
 - Node 18 or later.
 - [Claude Code](https://claude.com/claude-code) CLI on your PATH. Ranking runs through
-  `claude -p`, so it bills to your Claude subscription. Without it NearPrint still works,
+  `claude -p`, so it bills to your Claude subscription. Without it Print@ still works,
   ranked by distance only.
 - A Gmail account with an [app password](https://myaccount.google.com/apppasswords) if you
-  want NearPrint to email orders. Put `GMAIL_APP_PASSWORD=...` in `~/.gmail.env`.
+  want Print@ to email orders. Put `GMAIL_APP_PASSWORD=...` in `~/.gmail.env`.
 
 ## Install
 
 ```
-git clone https://github.com/AnthonyDavidAdams/print-at ~/nearprint
-sudo ~/nearprint/install.sh
+git clone https://github.com/AnthonyDavidAdams/print-at ~/printat
+sudo ~/printat/install.sh
 ```
 
-No terminal for sudo (running it from an agent, say)? `SUDO_ASKPASS=~/nearprint/helper/askpass.sh sudo -A ~/nearprint/install.sh`
+No terminal for sudo (running it from an agent, say)? `SUDO_ASKPASS=~/printat/helper/askpass.sh sudo -A ~/printat/install.sh`
 asks for the password in a dialog instead.
 
-Then edit `~/Library/Application Support/NearPrint/config.json`:
+Then edit `~/Library/Application Support/PrintAt/config.json`:
 
 | Key | Purpose |
 |---|---|
@@ -102,19 +102,19 @@ Then edit `~/Library/Application Support/NearPrint/config.json`:
 | `claudeModel` | leave blank for the CLI default |
 | `gmailEnv` | file holding `GMAIL_APP_PASSWORD` |
 
-Uninstall with `sudo ~/nearprint/uninstall.sh`.
+Uninstall with `sudo ~/printat/uninstall.sh`.
 
 ## Test without the print dialog
 
 ```
-lp -d NearPrint -o Priority=Price -o MaxDistance=10mi -o Delivery=Confirm ~/nearprint/test/sample.pdf
+lp -d PrintAt -o Priority=Price -o MaxDistance=10mi -o Delivery=Confirm ~/printat/test/sample.pdf
 ```
 
 Dry run (no dialogs, no email, still does search + AI ranking) for development:
 
 ```
-NEARPRINT_DRY_RUN=1 node ~/nearprint/agent/server.js
-NEARPRINT_DRY_RUN=1 NEARPRINT_SKIP_CLAUDE=1 node ~/nearprint/agent/server.js   # distance only
+PRINTAT_DRY_RUN=1 node ~/printat/agent/server.js
+PRINTAT_DRY_RUN=1 PRINTAT_SKIP_CLAUDE=1 node ~/printat/agent/server.js   # distance only
 ```
 
 ## Console
@@ -127,11 +127,11 @@ or removed like any other printer.
 
 ## Where things land
 
-- `~/Library/Application Support/NearPrint/jobs/<id>/` — the PDF, `job.json`, `candidates.json`, `ranking.json`, `receipt.md`
-- `~/Library/Application Support/NearPrint/shops.json` — verified facts per shop, reused on later jobs
-- `~/Library/Application Support/NearPrint/memory.json` — which shop was used from where
-- `~/Library/Application Support/NearPrint/history.jsonl`
-- `~/Library/Logs/NearPrint/agent.log`
+- `~/Library/Application Support/PrintAt/jobs/<id>/` — the PDF, `job.json`, `candidates.json`, `ranking.json`, `receipt.md`
+- `~/Library/Application Support/PrintAt/shops.json` — verified facts per shop, reused on later jobs
+- `~/Library/Application Support/PrintAt/memory.json` — which shop was used from where
+- `~/Library/Application Support/PrintAt/history.jsonl`
+- `~/Library/Logs/PrintAt/agent.log`
 - `curl localhost:4243/jobs` — recent jobs
 
 ## How submission works
@@ -147,7 +147,7 @@ and are offered directly only when nothing automatable exists nearby.
   addresses count.
 - **Your own emails**: know a store's order address the agent could not find (a local CVS,
   Walmart or Walgreens photo counter, say)? Enter it in the console next to that shop, or
-  pass it when creating a pinned printer (`nearprint-add "CVS" Nearest Confirm Eureka
+  pass it when creating a pinned printer (`printat-add "CVS" Nearest Confirm Eureka
   photo1234@cvs.com`). That shop is treated as automatable from then on.
 - **Web upload**: the portal is opened with the PDF selected in Finder and its path on the
   clipboard. Driving these checkouts with a browser agent is the obvious next step.

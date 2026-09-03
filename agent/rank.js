@@ -71,7 +71,7 @@ function buildPrompt(job, loc, candidates, cfg) {
   const known = candidates.map(c => cache[cacheKey(c)]).filter(Boolean);
   const now = new Date();
   const spec = job.spec;
-  return `You are NearPrint, a dispatcher that picks the best nearby place to print a document and works out how to send it there.
+  return `You are Print@, a dispatcher that picks the best nearby place to print a document and works out how to send it there.
 
 ## The job
 - Document: "${job.title}" (${spec.pages || 'unknown'} pages, ${spec.copies} cop${spec.copies === 1 ? 'y' : 'ies'})

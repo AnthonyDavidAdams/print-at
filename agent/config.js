@@ -3,14 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const APP_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'NearPrint');
+const APP_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'PrintAt');
 const JOBS_DIR = path.join(APP_DIR, 'jobs');
-const LOG_DIR = path.join(os.homedir(), 'Library', 'Logs', 'NearPrint');
+const LOG_DIR = path.join(os.homedir(), 'Library', 'Logs', 'PrintAt');
 const CONFIG_PATH = path.join(APP_DIR, 'config.json');
 const SHOP_CACHE_PATH = path.join(APP_DIR, 'shops.json');
 const HISTORY_PATH = path.join(APP_DIR, 'history.jsonl');
 const ROOT = path.resolve(__dirname, '..');
-const HELPER = path.join(ROOT, 'helper', 'nearprint-locate');
+const HELPER = path.join(ROOT, 'helper', 'printat-locate');
 
 const DEFAULTS = {
   contactName: os.userInfo().username,
@@ -38,8 +38,8 @@ function load() {
   }
   const cfg = { ...DEFAULTS, ...saved };
   if (!cfg.smtpUser) cfg.smtpUser = cfg.contactEmail;
-  cfg.dryRun = process.env.NEARPRINT_DRY_RUN === '1';
-  cfg.skipClaude = process.env.NEARPRINT_SKIP_CLAUDE === '1';
+  cfg.dryRun = process.env.PRINTAT_DRY_RUN === '1';
+  cfg.skipClaude = process.env.PRINTAT_SKIP_CLAUDE === '1';
   return cfg;
 }
 

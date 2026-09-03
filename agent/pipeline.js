@@ -164,14 +164,14 @@ async function run(job, cfg, report = () => {}) {
     const s = pick.submit || {};
     if (spec.delivery === 'FindOnly') {
       memory.remember(loc, spec, pick);
-      submit.revealPdf(job.pdf);
       job.result = { status: 'found', shop: pick.name, method: 'find_only' };
       status(`Found: ${pick.name}, ${summary(pick)}`);
       if (ux) {
         const added = autoAddPrinter(pick, spec, receipt);
-        const act = await ux.result(`${pick.name}\n${pick.address}\n${summary(pick)}\n\nThe PDF is selected in Finder.${added}`, [{ key: 'maps', label: 'Open in Maps' }, { key: 'done', label: 'Done' }]);
+        const act = await ux.result(`${pick.name}\n${pick.address}\n${summary(pick)}\n\n${methodText(pick)}${added}`, [{ key: 'pdf', label: 'Show PDF' }, { key: 'maps', label: 'Open in Maps' }, { key: 'done', label: 'Done' }]);
         if (act === 'maps') submit.openMaps(pick);
-      }
+        if (act === 'pdf') submit.revealPdf(job.pdf);
+      } else submit.revealPdf(job.pdf);
       return writeReceipt(job, receipt);
     }
     if (cfg.dryRun) {
@@ -205,14 +205,14 @@ async function run(job, cfg, report = () => {}) {
           await ux.result(`The ${pick.name} upload page is open in your browser and the PDF is selected in Finder. Drag it into the uploader and pick this store for pickup:\n${pick.address}${added}`, [{ key: 'done', label: 'Done' }]);
         }
       } else {
-        submit.revealPdf(job.pdf);
         const phone = s.phone || pick.phone || 'no phone listed';
         receipt.push(`No online ordering. Phone ${phone}. ${s.instructions || ''}`);
         job.result = { status: 'manual', shop: pick.name, method: s.method };
         memory.remember(loc, spec, pick);
         if (ux) {
-          const act = await ux.result(`${pick.name} has no online ordering.\n\n${pick.address}\nPhone: ${phone}\n\n${s.instructions || 'Bring the PDF in person.'}\n\nThe PDF is selected in Finder.`,
-            [{ key: 'call', label: 'Call' }, { key: 'maps', label: 'Open in Maps' }, { key: 'done', label: 'Done' }]);
+          const act = await ux.result(`${pick.name} has no online ordering.\n\n${pick.address}\nPhone: ${phone}\n\n${s.instructions || 'Bring the PDF in person.'}`,
+            [{ key: 'pdf', label: 'Show PDF' }, { key: 'call', label: 'Call' }, { key: 'maps', label: 'Open in Maps' }, { key: 'done', label: 'Done' }]);
+          if (act === 'pdf') submit.revealPdf(job.pdf);
           if (act === 'maps') submit.openMaps(pick);
           if (act === 'call' && phone !== 'no phone listed') { try { execFileSync('open', [`tel:${phone.replace(/[^\d+]/g, '')}`]); } catch {} }
         }

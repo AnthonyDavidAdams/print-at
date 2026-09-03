@@ -225,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model: Model
     init(model: Model) { self.model = model }
     func applicationDidFinishLaunching(_ n: Notification) {
-        if let icon = NSImage(contentsOfFile: "/Library/Printers/Icons/NearPrint.icns") { NSApp.applicationIconImage = icon }
+        if let icon = NSImage(contentsOfFile: "/Library/Printers/Icons/PrintAt.icns") { NSApp.applicationIconImage = icon }
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
                           styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Print@"

@@ -1,15 +1,15 @@
 *PPD-Adobe: "4.3"
-*% NearPrint(TM) - virtual printer that dispatches jobs to the nearest print shop.
+*% Print@(TM) - virtual printer that dispatches jobs to the nearest print shop.
 *FormatVersion: "4.3"
 *FileVersion: "1.0"
 *LanguageVersion: English
 *LanguageEncoding: ISOLatin1
-*PCFileName: "NEARPRNT.PPD"
-*Product: "(NearPrint)"
-*Manufacturer: "NearPrint"
-*ModelName: "NearPrint Print Shop Dispatcher"
-*ShortNickName: "NearPrint"
-*NickName: "NearPrint - nearest print shop"
+*PCFileName: "PRINTAT.PPD"
+*Product: "(Print@)"
+*Manufacturer: "Print@"
+*ModelName: "Print@ Print Shop Dispatcher"
+*ShortNickName: "Print@"
+*NickName: "Print@ - nearest print shop"
 *PSVersion: "(3010.000) 0"
 *LanguageLevel: "3"
 *ColorDevice: True
@@ -23,7 +23,7 @@
 *cupsFilter: "application/pdf 0 -"
 *cupsModelNumber: 1
 *cupsLanguages: "en"
-*APPrinterIconPath: "/Library/Printers/Icons/NearPrint.icns"
+*APPrinterIconPath: "/Library/Printers/Icons/PrintAt.icns"
 
 *DefaultResolution: 600dpi
 *Resolution 600dpi/600 dpi: "<</HWResolution[600 600]>>setpagedevice"
@@ -77,7 +77,7 @@
 *Duplex DuplexTumble/Two-sided, short edge: ""
 *CloseUI: *Duplex
 
-*OpenGroup: NearPrint/NearPrint Dispatch
+*OpenGroup: PrintAt/Print@ Dispatch
 *OpenUI *Priority/Optimize for: PickOne
 *OrderDependency: 30 AnySetup *Priority
 *DefaultPriority: Nearest
@@ -150,10 +150,10 @@
 *ConfirmLocation Yes/Always ask me: ""
 *ConfirmLocation No/Never, use what it finds: ""
 *CloseUI: *ConfirmLocation
-*CloseGroup: NearPrint
+*CloseGroup: PrintAt
 
 *DefaultFont: Courier
 *Font Courier: Standard "(002.004S)" Standard ROM
 *Font Helvetica: Standard "(001.006S)" Standard ROM
 *Font Times-Roman: Standard "(001.007S)" Standard ROM
-*% End of NearPrint.ppd
+*% End of PrintAt.ppd

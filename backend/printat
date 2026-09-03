@@ -1,7 +1,7 @@
 #!/bin/bash
-# NearPrint(TM) CUPS backend.
+# Print@(TM) CUPS backend.
 # cupsd runs this as _lp inside the CUPS sandbox. It hands the spooled PDF plus the
-# job options to the NearPrint agent over localhost and then stays connected until
+# job options to the Print@ agent over localhost and then stays connected until
 # the agent is done, relaying its progress as INFO lines. That keeps the job in the
 # print queue, with a live status, until the file has actually reached a shop.
 # Cancelling the job in the queue kills this process; the agent sees the socket
@@ -9,14 +9,14 @@
 #
 # argv: job-id user title copies options [file]
 
-PORT="${NEARPRINT_PORT:-4243}"
+PORT="${PRINTAT_PORT:-4243}"
 
 if [ $# -eq 0 ]; then
-  echo 'direct nearprint://localhost/ "NearPrint" "NearPrint print-shop dispatcher" "MFG:NearPrint;MDL:Dispatcher;"'
+  echo 'direct printat://localhost/ "Print@" "Print@ print-shop dispatcher" "MFG:PrintAt;MDL:Dispatcher;"'
   exit 0
 fi
 if [ $# -lt 5 ]; then
-  echo "Usage: nearprint job-id user title copies options [file]" >&2
+  echo "Usage: printat job-id user title copies options [file]" >&2
   exit 1
 fi
 
@@ -25,7 +25,7 @@ JOB_ID="$1"; JOB_USER="$2"; TITLE="$3"; COPIES="$4"; OPTIONS="$5"; FILE="${6:--}
 b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 
 echo "STATE: -offline-report" >&2
-echo "INFO: Sending to NearPrint agent" >&2
+echo "INFO: Sending to Print@ agent" >&2
 
 if [ "$FILE" = "-" ]; then DATA="@-"; else DATA="@$FILE"; fi
 
@@ -46,7 +46,7 @@ done < <(curl -sN --max-time 3600 \
   -H "X-NP-Title: $(b64 "$TITLE")" \
   -H "X-NP-Copies: ${COPIES}" \
   -H "X-NP-Options: $(b64 "$OPTIONS")" \
-  -H "X-NP-Printer: ${PRINTER:-NearPrint}" \
+  -H "X-NP-Printer: ${PRINTER:-PrintAt}" \
   -H "X-NP-Device-Uri: $(b64 "${DEVICE_URI:-}")" \
   --data-binary "$DATA")
 
@@ -60,9 +60,9 @@ case "$LAST" in
   *)
     if [ "$GOT_ANY" = 0 ]; then
       echo "STATE: +offline-report" >&2
-      echo "ERROR: NearPrint agent is not running (launchctl kickstart gui/\$UID/io.nearprint.agent)" >&2
+      echo "ERROR: Print@ agent is not running (launchctl kickstart gui/\$UID/io.printat.agent)" >&2
       exit 6                        # CUPS_BACKEND_RETRY
     fi
-    echo "ERROR: Lost contact with the NearPrint agent mid-job" >&2
+    echo "ERROR: Lost contact with the Print@ agent mid-job" >&2
     exit 1 ;;
 esac

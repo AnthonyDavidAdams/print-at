@@ -1,8 +1,8 @@
-// nearprint-locate: CoreLocation + MapKit helper for NearPrint.
-//   nearprint-locate locate                      -> {lat, lon, accuracy_m, source}
-//   nearprint-locate reverse <lat> <lon>          -> {address}
-//   nearprint-locate geocode "<address>"          -> {lat, lon, address}
-//   nearprint-locate search "<query>" <lat> <lon> <radius_m> -> [{name, address, phone, url, lat, lon, distance_m, category}]
+// printat-locate: CoreLocation + MapKit helper for Print@.
+//   printat-locate locate                      -> {lat, lon, accuracy_m, source}
+//   printat-locate reverse <lat> <lon>          -> {address}
+//   printat-locate geocode "<address>"          -> {lat, lon, address}
+//   printat-locate search "<query>" <lat> <lon> <radius_m> -> [{name, address, phone, url, lat, lon, distance_m, category}]
 import Foundation
 import CoreLocation
 import MapKit
@@ -107,7 +107,7 @@ func search(query: String, lat: Double, lon: Double, radius: Double) -> [[String
 }
 
 let args = CommandLine.arguments
-guard args.count >= 2 else { fail("usage: nearprint-locate locate|reverse|geocode|search ...") }
+guard args.count >= 2 else { fail("usage: printat-locate locate|reverse|geocode|search ...") }
 switch args[1] {
 case "locate":
     let l = Locator()

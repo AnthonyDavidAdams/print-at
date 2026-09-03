@@ -47,8 +47,8 @@ function printerNames(pick) {
 function addPrinter(pick, spec) {
   const { ROOT } = require('./config');
   const { short, label, queue } = printerNames(pick);
-  const uri = `nearprint://localhost/?shop=${encodeURIComponent(short)}`;
-  const args = ['-p', queue, '-E', '-v', uri, '-P', path.join(ROOT, 'ppd', 'NearPrint.ppd'), '-D', label,
+  const uri = `printat://localhost/?shop=${encodeURIComponent(short)}`;
+  const args = ['-p', queue, '-E', '-v', uri, '-P', path.join(ROOT, 'ppd', 'PrintAt.ppd'), '-D', label,
     '-L', pick.address || '', '-o', 'printer-is-shared=false', '-o', 'printer-error-policy=retry-job',
     '-o', 'ConfirmLocation=No', '-o', `Priority=${spec.priority}`, '-o', `Delivery=${spec.delivery === 'FindOnly' ? 'Confirm' : spec.delivery}`];
   const r = spawnSync('/usr/sbin/lpadmin', args, { encoding: 'utf8', timeout: 30000 });
