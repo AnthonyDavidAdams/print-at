@@ -1,0 +1,157 @@
+*PPD-Adobe: "4.3"
+*% NearPrint(TM) - virtual printer that dispatches jobs to the nearest print shop.
+*FormatVersion: "4.3"
+*FileVersion: "1.0"
+*LanguageVersion: English
+*LanguageEncoding: ISOLatin1
+*PCFileName: "NEARPRNT.PPD"
+*Product: "(NearPrint)"
+*Manufacturer: "NearPrint"
+*ModelName: "NearPrint Print Shop Dispatcher"
+*ShortNickName: "NearPrint"
+*NickName: "NearPrint - nearest print shop"
+*PSVersion: "(3010.000) 0"
+*LanguageLevel: "3"
+*ColorDevice: True
+*DefaultColorSpace: RGB
+*FileSystem: False
+*Throughput: "1"
+*LandscapeOrientation: Plus90
+*TTRasterizer: Type42
+*cupsVersion: 2.3
+*cupsManualCopies: True
+*cupsFilter: "application/pdf 0 -"
+*cupsModelNumber: 1
+*cupsLanguages: "en"
+
+*DefaultResolution: 600dpi
+*Resolution 600dpi/600 dpi: "<</HWResolution[600 600]>>setpagedevice"
+
+*OpenUI *PageSize/Paper Size: PickOne
+*OrderDependency: 10 AnySetup *PageSize
+*DefaultPageSize: Letter
+*PageSize Letter/US Letter: "<</PageSize[612 792]/ImagingBBox null>>setpagedevice"
+*PageSize Legal/US Legal: "<</PageSize[612 1008]/ImagingBBox null>>setpagedevice"
+*PageSize Tabloid/Tabloid 11x17: "<</PageSize[792 1224]/ImagingBBox null>>setpagedevice"
+*PageSize A4/A4: "<</PageSize[595 842]/ImagingBBox null>>setpagedevice"
+*PageSize A3/A3: "<</PageSize[842 1191]/ImagingBBox null>>setpagedevice"
+*CloseUI: *PageSize
+
+*OpenUI *PageRegion/Paper Size: PickOne
+*OrderDependency: 10 AnySetup *PageRegion
+*DefaultPageRegion: Letter
+*PageRegion Letter/US Letter: "<</PageSize[612 792]/ImagingBBox null>>setpagedevice"
+*PageRegion Legal/US Legal: "<</PageSize[612 1008]/ImagingBBox null>>setpagedevice"
+*PageRegion Tabloid/Tabloid 11x17: "<</PageSize[792 1224]/ImagingBBox null>>setpagedevice"
+*PageRegion A4/A4: "<</PageSize[595 842]/ImagingBBox null>>setpagedevice"
+*PageRegion A3/A3: "<</PageSize[842 1191]/ImagingBBox null>>setpagedevice"
+*CloseUI: *PageRegion
+
+*DefaultImageableArea: Letter
+*ImageableArea Letter/US Letter: "0 0 612 792"
+*ImageableArea Legal/US Legal: "0 0 612 1008"
+*ImageableArea Tabloid/Tabloid 11x17: "0 0 792 1224"
+*ImageableArea A4/A4: "0 0 595 842"
+*ImageableArea A3/A3: "0 0 842 1191"
+
+*DefaultPaperDimension: Letter
+*PaperDimension Letter/US Letter: "612 792"
+*PaperDimension Legal/US Legal: "612 1008"
+*PaperDimension Tabloid/Tabloid 11x17: "792 1224"
+*PaperDimension A4/A4: "595 842"
+*PaperDimension A3/A3: "842 1191"
+
+*OpenUI *ColorModel/Color Mode: PickOne
+*OrderDependency: 20 AnySetup *ColorModel
+*DefaultColorModel: RGB
+*ColorModel RGB/Color: "<</cupsColorSpace 1/cupsColorOrder 0>>setpagedevice"
+*ColorModel Gray/Black and White: "<</cupsColorSpace 0/cupsColorOrder 0>>setpagedevice"
+*CloseUI: *ColorModel
+
+*OpenUI *Duplex/Two-Sided Printing: PickOne
+*OrderDependency: 20 AnySetup *Duplex
+*DefaultDuplex: None
+*Duplex None/Single-sided: ""
+*Duplex DuplexNoTumble/Two-sided, long edge: ""
+*Duplex DuplexTumble/Two-sided, short edge: ""
+*CloseUI: *Duplex
+
+*OpenGroup: NearPrint/NearPrint Dispatch
+*OpenUI *Priority/Optimize for: PickOne
+*OrderDependency: 30 AnySetup *Priority
+*DefaultPriority: Nearest
+*Priority Nearest/Closest shop: ""
+*Priority Price/Lowest price: ""
+*Priority Turnaround/Fastest turnaround: ""
+*Priority OpenNow/Open right now: ""
+*Priority Quality/Best reviews and quality: ""
+*CloseUI: *Priority
+
+*OpenUI *MaxDistance/Search radius: PickOne
+*OrderDependency: 30 AnySetup *MaxDistance
+*DefaultMaxDistance: 5mi
+*MaxDistance 1mi/Walking, 1 mile: ""
+*MaxDistance 2mi/2 miles: ""
+*MaxDistance 5mi/5 miles: ""
+*MaxDistance 10mi/10 miles: ""
+*MaxDistance 25mi/25 miles: ""
+*CloseUI: *MaxDistance
+
+*OpenUI *ShopType/Shop type: PickOne
+*OrderDependency: 30 AnySetup *ShopType
+*DefaultShopType: Any
+*ShopType Any/Anything that prints: ""
+*ShopType Chains/Chains only, Staples, FedEx Office, UPS Store, Office Depot: ""
+*ShopType Local/Local print shops only: ""
+*ShopType Travel/Travel, hotel business centers, libraries, kiosks: ""
+*CloseUI: *ShopType
+
+*OpenUI *Pickup/Needed by: PickOne
+*OrderDependency: 30 AnySetup *Pickup
+*DefaultPickup: ASAP
+*Pickup ASAP/As soon as possible: ""
+*Pickup Today/Later today: ""
+*Pickup Tomorrow/Tomorrow: ""
+*Pickup ThisWeek/This week: ""
+*CloseUI: *Pickup
+
+*OpenUI *Binding/Finishing: PickOne
+*OrderDependency: 30 AnySetup *Binding
+*DefaultBinding: None
+*Binding None/Loose, no finishing: ""
+*Binding Staple/Stapled: ""
+*Binding ThreeHole/3-hole punched: ""
+*Binding Spiral/Spiral or coil bound: ""
+*Binding Comb/Comb bound: ""
+*CloseUI: *Binding
+
+*OpenUI *PaperStock/Paper stock: PickOne
+*OrderDependency: 30 AnySetup *PaperStock
+*DefaultPaperStock: Standard
+*PaperStock Standard/Standard 20 lb copy paper: ""
+*PaperStock Heavy/Heavy 32 lb: ""
+*PaperStock Cardstock/Cardstock: ""
+*PaperStock Glossy/Glossy: ""
+*CloseUI: *PaperStock
+
+*OpenUI *Delivery/How to send the job: PickOne
+*OrderDependency: 30 AnySetup *Delivery
+*DefaultDelivery: Confirm
+*Delivery Confirm/Show me the pick, then send: ""
+*Delivery Auto/Send to the best shop without asking: ""
+*Delivery FindOnly/Just find a shop, I will bring the file: ""
+*CloseUI: *Delivery
+
+*OpenUI *ConfirmLocation/Confirm my location first: PickOne
+*OrderDependency: 30 AnySetup *ConfirmLocation
+*DefaultConfirmLocation: Yes
+*ConfirmLocation Yes/Yes, ask me: ""
+*ConfirmLocation No/No, trust Location Services: ""
+*CloseUI: *ConfirmLocation
+*CloseGroup: NearPrint
+
+*DefaultFont: Courier
+*Font Courier: Standard "(002.004S)" Standard ROM
+*Font Helvetica: Standard "(001.006S)" Standard ROM
+*Font Times-Roman: Standard "(001.007S)" Standard ROM
+*% End of NearPrint.ppd

@@ -1,0 +1,51 @@
+#!/bin/bash
+# NearPrint(TM) CUPS backend.
+# cupsd runs this as _lp inside the CUPS sandbox. It does one thing: hand the
+# spooled PDF plus the job options to the NearPrint agent over localhost.
+# The agent (a user-level launchd job) does location, search, ranking, delivery.
+#
+# argv: job-id user title copies options [file]
+
+PORT="${NEARPRINT_PORT:-4243}"
+
+if [ $# -eq 0 ]; then
+  echo 'direct nearprint://localhost/ "NearPrint" "NearPrint print-shop dispatcher" "MFG:NearPrint;MDL:Dispatcher;"'
+  exit 0
+fi
+if [ $# -lt 5 ]; then
+  echo "Usage: nearprint job-id user title copies options [file]" >&2
+  exit 1
+fi
+
+JOB_ID="$1"; JOB_USER="$2"; TITLE="$3"; COPIES="$4"; OPTIONS="$5"; FILE="${6:--}"
+
+b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
+
+echo "INFO: Handing off to NearPrint agent" >&2
+echo "STATE: -offline-report" >&2
+
+if [ "$FILE" = "-" ]; then DATA="@-"; else DATA="@$FILE"; fi
+
+CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 \
+  -X POST "http://127.0.0.1:${PORT}/job" \
+  -H "Content-Type: application/pdf" \
+  -H "X-NP-Job-Id: ${JOB_ID}" \
+  -H "X-NP-User: $(b64 "$JOB_USER")" \
+  -H "X-NP-Title: $(b64 "$TITLE")" \
+  -H "X-NP-Copies: ${COPIES}" \
+  -H "X-NP-Options: $(b64 "$OPTIONS")" \
+  -H "X-NP-Printer: ${PRINTER:-NearPrint}" \
+  --data-binary "$DATA")
+
+case "$CODE" in
+  202|200)
+    echo "INFO: NearPrint agent accepted the job" >&2
+    exit 0 ;;
+  000)
+    echo "STATE: +offline-report" >&2
+    echo "ERROR: NearPrint agent is not running (launchctl kickstart gui/\$UID/io.nearprint.agent)" >&2
+    exit 6 ;;   # CUPS_BACKEND_RETRY
+  *)
+    echo "ERROR: NearPrint agent rejected the job (HTTP $CODE)" >&2
+    exit 1 ;;   # CUPS_BACKEND_FAILED
+esac

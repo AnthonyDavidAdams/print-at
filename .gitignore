@@ -1,0 +1,6 @@
+helper/nearprint-locate
+helper/*.o
+.DS_Store
+node_modules/
+*.log
+helper/_CodeSignature/
