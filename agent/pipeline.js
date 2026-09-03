@@ -32,29 +32,29 @@ function methodText(r) {
 async function confirmLocation(loc, job) {
   let cur = loc;
   for (;;) {
-    const btn = ui.dialog(
+    const btn = await ui.dialog(
       `Where should NearPrint look for a print shop for "${job.title}"?\n\nNear: ${cur.address || `${cur.lat}, ${cur.lon}`}\nSource: ${cur.source}`,
       ['Cancel', 'Enter an address…', 'Use this location'], 'Use this location');
     if (!btn || btn === 'Cancel') return null;
     if (btn === 'Use this location') return cur;
-    const typed = ui.prompt('Street address, intersection, or place name:', cur.address || '');
+    const typed = await ui.prompt('Street address, intersection, or place name:', cur.address || '');
     if (!typed) return null;
     try { cur = await geocode(typed); } catch { ui.notify(`Could not find "${typed}". Try again.`); }
   }
 }
 
-function pickDialog(ranked, job, spec) {
+async function pickDialog(ranked, job, spec) {
   let idx = 0;
   for (;;) {
     const r = ranked[idx];
     const text = `Best match for "${job.title}" (${spec.pages || '?'} pages, ${spec.color ? 'color' : 'B&W'}, ${spec.copies} cop${spec.copies === 1 ? 'y' : 'ies'}):\n\n` +
       `${r.name}\n${r.address}\n${summary(r)}\n\n${r.why}\n\nHow: ${methodText(r)}`;
     const primary = r.submit.method === 'email' ? 'Send order' : r.submit.method === 'portal' ? 'Open upload page' : 'Show details';
-    const btn = ui.dialog(text, ['Cancel', 'Other shops…', primary], primary);
+    const btn = await ui.dialog(text, ['Cancel', 'Other shops…', primary], primary);
     if (!btn || btn === 'Cancel') return null;
     if (btn === primary) return r;
     const labels = ranked.map((x, i) => `${i + 1}. ${x.name} — ${summary(x)}`);
-    const chosen = ui.chooseFrom(labels, 'Every shop found, best first:');
+    const chosen = await ui.chooseFrom(labels, 'Every shop found, best first:');
     if (chosen) idx = labels.indexOf(chosen);
   }
 }
@@ -66,43 +66,49 @@ function writeReceipt(job, lines) {
   return p;
 }
 
-async function run(job, cfg) {
+async function run(job, cfg, report = () => {}) {
+  const check = () => { if (job.cancelled) throw new Error('cancelled from the print queue'); };
   const spec = job.spec;
   const receipt = [`- Job ${job.id}, ${spec.pages || '?'} pages x ${spec.copies}, ${spec.color ? 'color' : 'B&W'}, ${spec.duplex ? 'duplex' : 'simplex'}, ${spec.binding}, ${spec.paperStock}`,
     `- Priority ${spec.priority}, radius ${spec.maxDistance}, shop type ${spec.shopType}, delivery ${spec.delivery}`];
   const interactive = !cfg.dryRun && spec.delivery !== 'Auto';
 
-  ui.notify(`Finding a print shop for "${job.title}"…`, 'Locating you');
+  report('Locating you');
   let loc;
   try { loc = await locate(cfg); } catch (e) {
     if (cfg.dryRun) throw e;
-    const typed = ui.prompt('NearPrint could not determine your location. Where are you?', cfg.homeAddress || '');
+    const typed = await ui.prompt('NearPrint could not determine your location. Where are you?', cfg.homeAddress || '');
     if (!typed) { job.result = { status: 'cancelled', step: 'location' }; return writeReceipt(job, receipt); }
     loc = await geocode(typed);
   }
+  check();
   if (interactive && spec.confirmLocation) {
+    report('Waiting for you to confirm the location');
     loc = await confirmLocation(loc, job);
+    check();
     if (!loc) { job.result = { status: 'cancelled', step: 'location' }; return writeReceipt(job, receipt); }
   }
   receipt.push(`- Location: ${loc.address} (${loc.source})`);
   log(`job ${job.id}: location ${loc.address} via ${loc.source}`);
 
-  ui.notify(`Searching within ${spec.maxDistance} of ${loc.address}`, 'Finding shops');
+  report(`Searching within ${spec.maxDistance} of ${loc.address}`);
   const candidates = await findCandidates(loc, spec.shopType, spec.maxDistance);
   log(`job ${job.id}: ${candidates.length} candidates`);
   if (!candidates.length) {
-    if (interactive) ui.dialog(`No print shops found within ${spec.maxDistance} of ${loc.address}. Try a larger search radius in the print dialog.`, ['OK']);
+    if (interactive) await ui.dialog(`No print shops found within ${spec.maxDistance} of ${loc.address}. Try a larger search radius in the print dialog.`, ['OK']);
     job.result = { status: 'no_candidates' };
     return writeReceipt(job, receipt);
   }
   fs.writeFileSync(path.join(job.dir, 'candidates.json'), JSON.stringify(candidates, null, 2));
 
-  ui.notify(`${candidates.length} places found. Checking hours, prices and how to order…`, 'This takes a minute or two');
+  check();
+  report(`Checking hours, prices and how to order at ${candidates.length} places (a minute or two)`);
   const ranking = await rank(job, loc, candidates, cfg);
+  check();
   fs.writeFileSync(path.join(job.dir, 'ranking.json'), JSON.stringify(ranking, null, 2));
   const ranked = ranking.ranked.filter(r => r.score > 0.05);
   if (!ranked.length) {
-    if (interactive) ui.dialog('None of the nearby shops can take this job. See ranking.json in the job folder for why.', ['OK']);
+    if (interactive) await ui.dialog('None of the nearby shops can take this job. See ranking.json in the job folder for why.', ['OK']);
     job.result = { status: 'no_viable' };
     return writeReceipt(job, receipt);
   }
@@ -110,8 +116,9 @@ async function run(job, cfg) {
 
   let pick = ranked[0];
   if (spec.delivery === 'FindOnly') {
+    report(`Found: ${pick.name}, ${summary(pick)}`);
     if (interactive) {
-      const btn = ui.dialog(`Top picks for "${job.title}":\n\n` + ranked.slice(0, 3).map((r, i) => `${i + 1}. ${r.name}\n   ${r.address}\n   ${summary(r)}`).join('\n\n'), ['Done', 'Reveal PDF', 'Open #1 in Maps'], 'Open #1 in Maps');
+      const btn = await ui.dialog(`Top picks for "${job.title}":\n\n` + ranked.slice(0, 3).map((r, i) => `${i + 1}. ${r.name}\n   ${r.address}\n   ${summary(r)}`).join('\n\n'), ['Done', 'Reveal PDF', 'Open #1 in Maps'], 'Open #1 in Maps');
       if (btn === 'Open #1 in Maps') submit.openMaps(pick);
       if (btn === 'Reveal PDF') submit.revealPdf(job.pdf);
     }
@@ -120,9 +127,12 @@ async function run(job, cfg) {
   }
 
   if (interactive) {
-    pick = pickDialog(ranked, job, spec);
+    report(`Waiting for your OK: ${pick.name}, ${summary(pick)}`);
+    pick = await pickDialog(ranked, job, spec);
+    check();
     if (!pick) { job.result = { status: 'cancelled', step: 'pick' }; return writeReceipt(job, receipt); }
   }
+  report(`Sending to ${pick.name}`);
   receipt.push(`## Chosen: ${pick.name}`, `${pick.address}`, `${summary(pick)}`, `Method: ${methodText(pick)}`, '');
 
   const s = pick.submit;
@@ -142,7 +152,7 @@ async function run(job, cfg) {
       receipt.push(`Sent: ${out}`, '', '### Email', `Subject: ${subject}`, '', body);
       job.result = { status: 'sent', shop: pick.name, method: 'email', to: s.email };
       ui.notify(`Order emailed to ${pick.name}. They will reply to confirm price and pickup time.`, 'Sent');
-      if (interactive) ui.dialog(`Order emailed to ${pick.name} (${s.email}).\n\nThey will reply to ${cfg.contactEmail} with price and ready time. A copy was cc'd to you.`, ['Open in Maps', 'OK'], 'OK') === 'Open in Maps' && submit.openMaps(pick);
+      if (interactive && await ui.dialog(`Order emailed to ${pick.name} (${s.email}).\n\nThey will reply to ${cfg.contactEmail} with price and ready time. A copy was cc'd to you.`, ['Open in Maps', 'OK'], 'OK') === 'Open in Maps') submit.openMaps(pick);
     } else if (s.method === 'portal' && s.url) {
       submit.openPortal(s.url, job.pdf);
       receipt.push(`Opened portal ${s.url}; PDF revealed in Finder and its path copied to the clipboard.`);
@@ -154,7 +164,7 @@ async function run(job, cfg) {
       receipt.push(`No online ordering. Phone ${phone}. ${s.instructions || ''}`);
       job.result = { status: 'manual', shop: pick.name, method: s.method };
       if (interactive) {
-        const btn = ui.dialog(`${pick.name} has no online ordering.\n\n${pick.address}\nPhone: ${phone}\n\n${s.instructions || 'Bring the PDF in person.'}\n\nThe PDF is selected in Finder.`, ['OK', 'Call', 'Open in Maps'], 'Open in Maps');
+        const btn = await ui.dialog(`${pick.name} has no online ordering.\n\n${pick.address}\nPhone: ${phone}\n\n${s.instructions || 'Bring the PDF in person.'}\n\nThe PDF is selected in Finder.`, ['OK', 'Call', 'Open in Maps'], 'Open in Maps');
         if (btn === 'Open in Maps') submit.openMaps(pick);
         if (btn === 'Call' && phone !== 'no phone listed') { try { require('child_process').execFileSync('open', [`tel:${phone.replace(/[^\d+]/g, '')}`]); } catch {} }
       }
@@ -163,7 +173,7 @@ async function run(job, cfg) {
     log(`job ${job.id}: delivery failed: ${e.message}`);
     receipt.push(`Delivery failed: ${e.message}`);
     job.result = { status: 'failed', shop: pick.name, error: e.message };
-    if (interactive) ui.dialog(`Could not send the job to ${pick.name}:\n\n${e.message}\n\nThe PDF is at:\n${job.pdf}`, ['OK']);
+    if (interactive) await ui.dialog(`Could not send the job to ${pick.name}:\n\n${e.message}\n\nThe PDF is at:\n${job.pdf}`, ['OK']);
     submit.revealPdf(job.pdf);
   }
   return writeReceipt(job, receipt);

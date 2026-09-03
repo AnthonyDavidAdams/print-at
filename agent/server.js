@@ -97,15 +97,34 @@ const server = http.createServer((req, res) => {
     };
     fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify(job, null, 2));
     log(`job ${id}: "${title}" ${job.spec.pages}pp x${job.spec.copies} ${JSON.stringify(job.spec)}`);
-    res.writeHead(202, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ id }));
+    // Stream progress back to the CUPS backend so the job stays in the print
+    // queue, with a live status line, until dispatch is really finished.
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders();
+    let finished = false;
+    const report = msg => { log(`job ${id}: ${msg}`); if (!finished) res.write(msg.replace(/\n/g, ' ') + '\n'); };
+    res.on('close', () => {
+      if (finished) return;
+      job.cancelled = true;
+      log(`job ${id}: backend disconnected, cancelling`);
+      ui.cancelDialogs();
+    });
+    report(`Queued as job ${id}`);
 
-    queue = queue.then(() => run(job, cfg)).then(receipt => {
+    queue = queue.then(() => run(job, cfg, report)).then(() => {
       log(`job ${id}: done -> ${JSON.stringify(job.result)}`);
       fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify(job, null, 2));
+      const r = job.result || {};
+      const line = r.status === 'sent' ? `Emailed to ${r.shop}` : r.status === 'portal_opened' ? `Upload page opened for ${r.shop}`
+        : r.status === 'found' ? `Found ${r.shop}` : r.status === 'manual' ? `${r.shop}: bring the file in` : r.status === 'cancelled' ? 'Cancelled'
+        : r.status === 'dry_run' ? `Dry run: ${r.shop}` : r.status === 'failed' ? `FAIL ${r.error}` : r.status;
+      finished = true;
+      res.end((r.status === 'cancelled' ? 'FAIL Cancelled by you' : line.startsWith('FAIL') ? line : `DONE ${line}`) + '\n');
     }).catch(e => {
       log(`job ${id}: pipeline error: ${e.stack || e.message}`);
-      ui.notify(`Could not dispatch "${title}": ${e.message}`, 'Error');
+      if (!job.cancelled) ui.notify(`Could not dispatch "${title}": ${e.message}`, 'Error');
+      finished = true;
+      res.end(`FAIL ${e.message}\n`);
     });
   });
 });

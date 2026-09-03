@@ -1,8 +1,11 @@
 #!/bin/bash
 # NearPrint(TM) CUPS backend.
-# cupsd runs this as _lp inside the CUPS sandbox. It does one thing: hand the
-# spooled PDF plus the job options to the NearPrint agent over localhost.
-# The agent (a user-level launchd job) does location, search, ranking, delivery.
+# cupsd runs this as _lp inside the CUPS sandbox. It hands the spooled PDF plus the
+# job options to the NearPrint agent over localhost and then stays connected until
+# the agent is done, relaying its progress as INFO lines. That keeps the job in the
+# print queue, with a live status, until the file has actually reached a shop.
+# Cancelling the job in the queue kills this process; the agent sees the socket
+# close and cancels the dispatch.
 #
 # argv: job-id user title copies options [file]
 
@@ -21,12 +24,21 @@ JOB_ID="$1"; JOB_USER="$2"; TITLE="$3"; COPIES="$4"; OPTIONS="$5"; FILE="${6:--}
 
 b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 
-echo "INFO: Handing off to NearPrint agent" >&2
 echo "STATE: -offline-report" >&2
+echo "INFO: Sending to NearPrint agent" >&2
 
 if [ "$FILE" = "-" ]; then DATA="@-"; else DATA="@$FILE"; fi
 
-CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 \
+GOT_ANY=0
+LAST=""
+while IFS= read -r line; do
+  GOT_ANY=1
+  case "$line" in
+    DONE*|FAIL*) LAST="$line" ;;
+    "") ;;
+    *) echo "INFO: $line" >&2 ;;
+  esac
+done < <(curl -sN --max-time 3600 \
   -X POST "http://127.0.0.1:${PORT}/job" \
   -H "Content-Type: application/pdf" \
   -H "X-NP-Job-Id: ${JOB_ID}" \
@@ -37,15 +49,19 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 120 \
   -H "X-NP-Printer: ${PRINTER:-NearPrint}" \
   --data-binary "$DATA")
 
-case "$CODE" in
-  202|200)
-    echo "INFO: NearPrint agent accepted the job" >&2
+case "$LAST" in
+  DONE*)
+    echo "INFO: ${LAST#DONE }" >&2
     exit 0 ;;
-  000)
-    echo "STATE: +offline-report" >&2
-    echo "ERROR: NearPrint agent is not running (launchctl kickstart gui/\$UID/io.nearprint.agent)" >&2
-    exit 6 ;;   # CUPS_BACKEND_RETRY
+  FAIL*)
+    echo "ERROR: ${LAST#FAIL }" >&2
+    exit 1 ;;                       # CUPS_BACKEND_FAILED
   *)
-    echo "ERROR: NearPrint agent rejected the job (HTTP $CODE)" >&2
-    exit 1 ;;   # CUPS_BACKEND_FAILED
+    if [ "$GOT_ANY" = 0 ]; then
+      echo "STATE: +offline-report" >&2
+      echo "ERROR: NearPrint agent is not running (launchctl kickstart gui/\$UID/io.nearprint.agent)" >&2
+      exit 6                        # CUPS_BACKEND_RETRY
+    fi
+    echo "ERROR: Lost contact with the NearPrint agent mid-job" >&2
+    exit 1 ;;
 esac
