@@ -30,6 +30,7 @@ const SCHEMA = {
           rating: { type: ['number', 'null'] },
           score: { type: 'number' },
           why: { type: 'string' },
+          automatable: { type: 'boolean' },
           submit: {
             type: 'object',
             required: ['method'],
@@ -93,36 +94,55 @@ ${known.length ? JSON.stringify(known, null, 1) : 'none'}
 1. Use WebSearch and WebFetch to verify, for the 4-6 most promising candidates given the priority: today's hours (are they open now?), document-printing prices for this job, realistic turnaround, and HOW TO SUBMIT a file (order email address, online upload portal, or phone/walk-in only). Prefer the shop's own website or its brand's official store page. Do not spend more than a few lookups per shop.
 2. Estimate total cost for this exact job (pages x copies x per-page price, plus finishing). If unknown, use typical brand pricing from the notes and say so in cost_basis.
 3. Rank every candidate. score is 0-1. Shops that cannot do the job (photo-only, closed for the needed window, no color when color is required) get a low score and a why that says so.
-4. Submission method rules:
+4. Submission policy: the user wants the job SENT for them, not a form to fill in. A shop whose order can be placed by email (or another machine-sendable channel) is worth far more than a cheaper or closer one that only has a web upload form or a phone number. Look hard for an order/quote email on the shop's own site, its brand's store page, PrinterOn-style email-to-print addresses (hotels, libraries), or a published store email pattern (The UPS Store: store####@theupsstore.com). Set automatable=true only for "email". Rank all automatable shops above all non-automatable ones unless the automatable one cannot do the job.
+5. Submission method rules:
    - "email": ONLY if you found a real order/quote email address for that specific location or brand on an official page. Never guess an address.
    - "portal": an official online upload URL (brand portal is fine, prefer a store-specific page if it exists).
    - "phone": no online path found but a phone number exists.
    - "in_person": walk-in only (libraries, kiosks, hotel business centers).
    For email, write email_subject and email_body as ${cfg.contactName}: state the specs above plainly, say the PDF is attached, ask them to confirm price and ready time by reply, give pickup name${cfg.contactPhone ? ' and phone ' + cfg.contactPhone : ''}. Plain text, short, no marketing tone.
-5. Return only the JSON.`;
+6. Return only the JSON.`;
 }
 
-function runClaude(prompt, cfg) {
+function runClaude(prompt, cfg, onEvent = () => {}) {
   return new Promise((resolve, reject) => {
-    const args = ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(SCHEMA),
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--json-schema', JSON.stringify(SCHEMA),
       '--permission-mode', 'bypassPermissions', '--max-turns', '60'];
     if (cfg.claudeModel) args.push('--model', cfg.claudeModel);
     args.push('--allowedTools', 'WebSearch', 'WebFetch', '--tools', 'WebSearch', 'WebFetch');
     const env = { ...process.env };
     for (const k of Object.keys(env)) if (/^CLAUDE(CODE|_CODE)/.test(k)) delete env[k];
-    env.PATH = `${os.homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${env.PATH || '/usr/bin:/bin'}`;
+    env.PATH = `${os.homedir()}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${env.PATH || '/usr/bin:/bin'}:/usr/sbin:/sbin`;
     const child = spawn('claude', args, { env, cwd: os.tmpdir(), stdio: ['pipe', 'pipe', 'pipe'] });
-    let out = '', err = '';
+    let buf = '', err = '', final = null, lookups = 0;
     const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('claude timed out')); }, cfg.claudeTimeoutSec * 1000);
-    child.stdout.on('data', d => out += d);
+    const handle = line => {
+      let ev; try { ev = JSON.parse(line); } catch { return; }
+      if (ev.type === 'result') { final = ev; return; }
+      if (ev.type !== 'assistant' || !ev.message || !Array.isArray(ev.message.content)) return;
+      for (const b of ev.message.content) {
+        if (b.type !== 'tool_use') continue;
+        lookups++;
+        if (b.name === 'WebSearch' && b.input && b.input.query) onEvent(`Searching the web: ${b.input.query}`);
+        else if (b.name === 'WebFetch' && b.input && b.input.url) { let h = b.input.url; try { h = new URL(b.input.url).hostname.replace(/^www\./, ''); } catch {} onEvent(`Reading ${h}`); }
+      }
+    };
+    child.stdout.on('data', d => {
+      buf += d;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) { handle(buf.slice(0, i)); buf = buf.slice(i + 1); }
+    });
     child.stderr.on('data', d => err += d);
     child.on('error', e => { clearTimeout(timer); reject(e); });
     child.on('close', code => {
       clearTimeout(timer);
+      if (buf.trim()) handle(buf);
       if (code !== 0) return reject(new Error(`claude exited ${code}: ${err.slice(-500)}`));
       try {
-        const j = JSON.parse(out);
+        const j = final || {};
+        if (!final) return reject(new Error('claude produced no result event'));
         if (j.is_error) return reject(new Error(`claude error: ${String(j.result).slice(0, 300)}`));
+        onEvent(`Ranking ${lookups} lookups into a shortlist`);
         let data = j.structured_output;
         if (!data && typeof j.result === 'string') {
           const m = j.result.match(/\{[\s\S]*\}/);
@@ -144,7 +164,7 @@ function fallbackRanking(candidates) {
     ranked: candidates.map((c, i) => ({
       id: c.id, name: c.name, address: c.address, distance_mi: c.distance_mi,
       open_now: null, hours_today: '', est_cost_usd: null, cost_basis: '', turnaround: '',
-      rating: null, score: Math.max(0.05, 1 - i * 0.07), why: `${c.distance_mi} mi away`,
+      rating: null, score: Math.max(0.05, 1 - i * 0.07), why: `${c.distance_mi} mi away`, automatable: false,
       submit: c.portal ? { method: 'portal', url: c.portal, phone: c.phone, instructions: 'Upload the PDF on the brand portal and choose this store for pickup.' }
         : c.phone ? { method: 'phone', phone: c.phone, url: c.url, instructions: 'Call to ask how they accept files.' }
         : { method: 'in_person', url: c.url, instructions: 'Bring the file on a USB stick or ask at the counter.' },
@@ -152,17 +172,24 @@ function fallbackRanking(candidates) {
   };
 }
 
-async function rank(job, loc, candidates, cfg) {
+async function rank(job, loc, candidates, cfg, onEvent = () => {}) {
   if (!candidates.length) return { ranked: [] };
   if (cfg.skipClaude) return fallbackRanking(candidates);
   try {
-    const data = await runClaude(buildPrompt(job, loc, candidates, cfg), cfg);
+    const data = await runClaude(buildPrompt(job, loc, candidates, cfg), cfg, onEvent);
     const byId = Object.fromEntries(candidates.map(c => [c.id, c]));
     const cache = loadCache();
     data.ranked = data.ranked.map(r => {
       const c = byId[r.id] || {};
       const merged = { ...c, ...r, address: r.address || c.address, distance_mi: r.distance_mi ?? c.distance_mi };
+      const known = cache[cacheKey(merged)];
+      if (known && known.manual_email) {
+        merged.submit = { method: 'email', email: known.manual_email, instructions: 'Order email entered by you in the Print@ console' };
+        merged.automatable = true;
+        merged.score = Math.max(merged.score, 0.5);
+      }
       cache[cacheKey(merged)] = {
+        ...(known && known.manual_email ? { manual_email: known.manual_email } : {}),
         name: merged.name, address: merged.address, hours_today: merged.hours_today, cost_basis: merged.cost_basis,
         submit: merged.submit, rating: merged.rating, verified: new Date().toISOString().slice(0, 10),
       };

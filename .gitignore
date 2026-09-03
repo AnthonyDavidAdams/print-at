@@ -5,3 +5,5 @@ node_modules/
 *.log
 helper/_CodeSignature/
 icon/NearPrint.iconset/
+helper/panel/PrintAtPanel
+helper/panel/PrintAt.app/

@@ -1,14 +1,15 @@
 #!/bin/bash
-# Create a printer pinned to one shop:  nearprint-add "Staples" [Priority] [Delivery]
-# Shows up as "Print at Staples" in every Print dialog. No sudo needed for admin users.
+# Create a printer pinned to one shop:  nearprint-add "Staples" [Priority] [Delivery] [City] [order-email]
+# Shows up as "Print@ Staples, Eureka" in every Print dialog. No sudo needed for admin users.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SHOP="${1:?usage: nearprint-add \"Shop name\" [Nearest|Price|Turnaround|OpenNow|Quality] [Confirm|Auto|FindOnly]}"
-PRIORITY="${2:-Nearest}"; DELIVERY="${3:-Confirm}"
-LABEL="Print at $SHOP"
-QUEUE="$(printf '%s' "$LABEL" | sed -E 's/[^A-Za-z0-9]+/_/g; s/^_|_$//g' | cut -c1-60)"
+PRIORITY="${2:-Nearest}"; DELIVERY="${3:-Confirm}"; CITY="${4:-}"; EMAIL="${5:-}"
+LABEL="Print@ $SHOP${CITY:+, $CITY}"
+QUEUE="PrintAt_$(printf '%s' "$SHOP${CITY:+_$CITY}" | sed -E 's/[^A-Za-z0-9]+/_/g; s/^_|_$//g' | cut -c1-60)"
 ENC="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$SHOP")"
-lpadmin -p "$QUEUE" -E -v "nearprint://localhost/?shop=$ENC" -P "$ROOT/ppd/NearPrint.ppd" -D "$LABEL" \
+EMAILQ=""; [ -n "$EMAIL" ] && EMAILQ="&email=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$EMAIL")"
+/usr/sbin/lpadmin -p "$QUEUE" -E -v "nearprint://localhost/?shop=$ENC$EMAILQ" -P "$ROOT/ppd/NearPrint.ppd" -D "$LABEL" \
   -o printer-is-shared=false -o printer-error-policy=retry-job \
   -o ConfirmLocation=No -o "Priority=$PRIORITY" -o "Delivery=$DELIVERY"
 echo "Added printer \"$LABEL\" (queue $QUEUE). Remove with: lpadmin -x $QUEUE"

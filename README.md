@@ -1,9 +1,11 @@
-# NearPrint™
+# Print@™
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A virtual printer for macOS. Pick **NearPrint** in any Print dialog and the job goes to
-the closest print shop that fits your priorities instead of to a device on your desk.
+A virtual printer for macOS. Pick **Print@ Nearby** in any Print dialog and the job goes to
+the closest print shop that fits your priorities instead of to a device on your desk. Once a
+shop has been used it becomes its own printer: **Print@ Staples, Eureka**, **Print@ The UPS
+Store, Eureka**. (Repository and internal names still say `nearprint`.)
 
 ```
 Print dialog ──> CUPS ──> backend/nearprint (POST to localhost) ──> agent/server.js
@@ -25,7 +27,7 @@ Print dialog ──> CUPS ──> backend/nearprint (POST to localhost) ──> 
 | Finishing | Loose · Stapled · 3-hole · Spiral · Comb |
 | Paper stock | Standard · Heavy · Cardstock · Glossy |
 | How to send | Show me the pick, then send · Send without asking · Just find a shop |
-| Confirm my location first | Yes · No |
+| Confirm my location first | Only when unsure (default) · Always · Never |
 
 Color mode, two-sided, copies and paper size are the standard controls.
 
@@ -33,29 +35,40 @@ Page Setup on macOS only carries paper size, orientation and scale, so the dispa
 settings live in the printer-options pane of the Print dialog. Save them as a Preset
 ("Cheapest, this week") and it becomes one click.
 
-## One printer per shop
+## One printer per shop, and no repeat searches
 
-Any shop NearPrint finds can become its own printer, so the Print dialog's printer menu
-reads like a list of places: **Print at Staples**, **Print at The UPS Store**, **Print at
-Bug Press**. Each is a normal queue with the same options, pinned to that shop through its
-device URI (`nearprint://localhost/?shop=Staples`), with the location confirmation off and
-the priority and delivery defaults copied from the job that created it.
+The first time a shop is actually used (order emailed, upload page opened, or chosen in
+find-only mode) two things happen:
 
-- In the dialog after a job: **Add as printer** (or **Add #1 as printer** in find-only mode).
-- From a terminal: `~/nearprint/nearprint-add "Staples" Price Auto` (shop, priority, delivery).
-- Remove one: `lpadmin -x Print_at_Staples`.
+1. It becomes a printer of its own, **Print@ Staples, Eureka**, pinned to that shop through
+   its device URI (`nearprint://localhost/?shop=Staples`), location confirmation off, priority
+   and delivery defaults copied from the job that created it.
+2. **Print@ Nearby** remembers it for that spot. The next job from within 1.5 miles with the
+   same priority and shop type skips the search and offers that shop straight away, with a
+   **Search again** button if you want a fresh look. Memories expire after 30 days.
+
+From a terminal: `~/nearprint/nearprint-add "Staples" Price Auto Eureka` (shop, priority,
+delivery, city). Remove one: `lpadmin -x PrintAt_Staples_Eureka`.
 
 Printing to a pinned queue skips the search, verifies that shop's hours, price and ordering
 method, and sends. If the shop is not within the search radius the agent widens to 25 miles.
 
 ## What you see while it runs
 
-The Print dialog closes when you click Print, as it does for every printer. The job then
-sits in the NearPrint queue window (the printer icon in the Dock) with a live status line:
-"Locating you", "Checking hours, prices and how to order at 8 places", "Waiting for your OK:
-The UPS Store, 1.3 mi, open now, est. $1.70", "Emailed to The UPS Store". It leaves the queue
-only when dispatch is finished. Cancelling the job there cancels the dispatch and closes any
-NearPrint dialog. Failures stay in the queue with the reason.
+The Print dialog closes when you click Print, as it does for every printer. Two things then
+show the job:
+
+- **One Print@ window** that follows the job from "Locating you" through the ranked list
+  with a Send button to the result. While shops are being checked it shows what is actually
+  happening, streamed from the ranking run ("Searching the web: Staples Eureka print hours",
+  "Reading staples.com"). It is a small native app (`helper/panel`), launched per job and
+  driven by the agent over localhost. Closing it cancels the job.
+- **The queue window** (the printer icon in the Dock) with the same status as a live line.
+  The job leaves the queue only when dispatch is finished. Cancelling there cancels the
+  dispatch and closes the window. Failures stay in the queue with the reason.
+
+With "Send without asking" and location confirmation off there is no window at all, only a
+notification when the order has gone out.
 
 ## Requirements
 
@@ -103,27 +116,48 @@ NEARPRINT_DRY_RUN=1 node ~/nearprint/agent/server.js
 NEARPRINT_DRY_RUN=1 NEARPRINT_SKIP_CLAUDE=1 node ~/nearprint/agent/server.js   # distance only
 ```
 
+## Console
+
+`http://127.0.0.1:4243/` lists every Print@ printer with its pinned shop and defaults,
+the remembered shops (what "Print@ Nearby" will reuse instead of searching), the verified
+shop facts, and recent jobs, with Remove and Forget buttons and an Add printer form. The
+same printers show up in System Settings › Printers & Scanners, where they can be renamed
+or removed like any other printer.
+
 ## Where things land
 
 - `~/Library/Application Support/NearPrint/jobs/<id>/` — the PDF, `job.json`, `candidates.json`, `ranking.json`, `receipt.md`
 - `~/Library/Application Support/NearPrint/shops.json` — verified facts per shop, reused on later jobs
+- `~/Library/Application Support/NearPrint/memory.json` — which shop was used from where
 - `~/Library/Application Support/NearPrint/history.jsonl`
 - `~/Library/Logs/NearPrint/agent.log`
 - `curl localhost:4243/jobs` — recent jobs
 
 ## How submission works
 
-Claude picks one method per shop and only uses an email address it actually found on an
-official page. Chains get their upload portal opened with the PDF selected in Finder and
-its path on the clipboard. Independents with a published order email get the PDF emailed
-with the specs and a request to confirm price and ready time (cc to you). Everything else
-shows the phone number and the address with an Open in Maps button.
+The rule is automatable first. A shop whose order can be placed by email is ranked above a
+cheaper or closer one that only has a web upload form, and the window shows only the
+automatable shops. Form-only and phone-only shops sit behind a "Show other options" button
+and are offered directly only when nothing automatable exists nearby.
+
+- **Email**: the PDF goes out with the specs and a request to confirm price and ready time,
+  cc'd to you. Only addresses found on an official page are used, never guessed. The UPS
+  Store's per-store `store####@theupsstore.com` pattern and PrinterOn email-to-print
+  addresses count.
+- **Your own emails**: know a store's order address the agent could not find (a local CVS,
+  Walmart or Walgreens photo counter, say)? Enter it in the console next to that shop, or
+  pass it when creating a pinned printer (`nearprint-add "CVS" Nearest Confirm Eureka
+  photo1234@cvs.com`). That shop is treated as automatable from then on.
+- **Web upload**: the portal is opened with the PDF selected in Finder and its path on the
+  clipboard. Driving these checkouts with a browser agent is the obvious next step.
+- **Phone or walk-in**: address, phone, Open in Maps.
 
 ## Known limits
 
 - Location Services denies ad-hoc-signed CLI tools on some Macs, so the agent falls back to
-  IP geolocation (snapped to `homeAddress` when that is nearby) and asks you to confirm or
-  type an address.
+  IP geolocation, snapped to `homeAddress` when that is nearby. "Only when unsure" asks you
+  to confirm only when the fix is IP-only; a Location Services fix or the saved address is
+  used as is.
 - Chain portals (FedEx Office, Staples, UPS Store, Office Depot) are opened, not driven.
   Automating those checkouts is the obvious next step.
 - PPD-based printers are deprecated by Apple but still work through macOS 15.

@@ -7,6 +7,8 @@ const { execFileSync } = require('child_process');
 const { JOBS_DIR, load, log } = require('./config');
 const { run } = require('./pipeline');
 const ui = require('./ui');
+const panel = require('./panel');
+const console_ = require('./console');
 
 const cfg = load();
 let queue = Promise.resolve();
@@ -64,11 +66,12 @@ function buildSpec(opts, copiesHeader, pdfPath) {
     binding: opts.Binding || 'None',
     paperStock: opts.PaperStock || 'Standard',
     delivery: opts.Delivery || 'Confirm',
-    confirmLocation: (opts.ConfirmLocation || 'Yes') === 'Yes',
+    confirmLocation: opts.ConfirmLocation || 'Auto',   // Auto | Yes | No
   };
 }
 
 const server = http.createServer((req, res) => {
+  if (console_.handle(req, res, cfg)) return;
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ ok: true, dryRun: cfg.dryRun, skipClaude: cfg.skipClaude }));
@@ -79,6 +82,18 @@ const server = http.createServer((req, res) => {
     });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(list, null, 2));
+  }
+  const m = req.url.match(/^\/job\/([^/]+)\/(events|action)$/);
+  if (m) {
+    const p = panel.get(decodeURIComponent(m[1]));
+    if (!p) { res.writeHead(404); return res.end('no such job'); }
+    if (m[2] === 'events' && req.method === 'GET') return p.subscribe(res);
+    if (m[2] === 'action' && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => { try { p.action(JSON.parse(body || '{}')); res.writeHead(204); } catch { res.writeHead(400); } res.end(); });
+      return;
+    }
   }
   if (req.method !== 'POST' || req.url !== '/job') { res.writeHead(404); return res.end(); }
 
@@ -100,13 +115,13 @@ const server = http.createServer((req, res) => {
     const printer = req.headers['x-np-printer'] || 'NearPrint';
     const opts = { ...ppdDefaults(printer), ...parseOptions(b64(req.headers['x-np-options'])) };
     // A queue created for one shop carries it in its device URI: nearprint://localhost/?shop=Staples
-    let pin = '';
-    try { pin = new URL(b64(req.headers['x-np-device-uri'])).searchParams.get('shop') || ''; } catch {}
+    let pin = '', pinEmail = '';
+    try { const u = new URL(b64(req.headers['x-np-device-uri'])); pin = u.searchParams.get('shop') || ''; pinEmail = u.searchParams.get('email') || ''; } catch {}
     const job = {
       id, dir, pdf: pdfPath, title,
       user: b64(req.headers['x-np-user']),
       printer,
-      pin,
+      pin, pinEmail,
       receivedAt: new Date().toISOString(),
       options: opts,
       spec: buildSpec(opts, req.headers['x-np-copies'], pdfPath),
@@ -124,6 +139,7 @@ const server = http.createServer((req, res) => {
       job.cancelled = true;
       log(`job ${id}: backend disconnected, cancelling`);
       ui.cancelDialogs();
+      if (job.ux) job.ux.close();
     });
     report(`Queued as job ${id}`);
 

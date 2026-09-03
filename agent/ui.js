@@ -6,7 +6,7 @@
 const { spawn, spawnSync } = require('child_process');
 const { log } = require('./config');
 
-const TITLE = 'NearPrint™';
+const TITLE = 'Print@™';
 let current = null;
 
 function osa(script, args = [], timeoutMs = 15 * 60 * 1000) {

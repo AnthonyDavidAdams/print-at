@@ -145,9 +145,10 @@
 
 *OpenUI *ConfirmLocation/Confirm my location first: PickOne
 *OrderDependency: 30 AnySetup *ConfirmLocation
-*DefaultConfirmLocation: Yes
-*ConfirmLocation Yes/Yes, ask me: ""
-*ConfirmLocation No/No, trust Location Services: ""
+*DefaultConfirmLocation: Auto
+*ConfirmLocation Auto/Only when unsure: ""
+*ConfirmLocation Yes/Always ask me: ""
+*ConfirmLocation No/Never, use what it finds: ""
 *CloseUI: *ConfirmLocation
 *CloseGroup: NearPrint
 

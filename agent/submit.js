@@ -32,21 +32,28 @@ function revealPdf(pdfPath) {
   try { execFileSync('open', ['-R', pdfPath]); } catch {}
 }
 
-// Create a CUPS queue pinned to this shop: shows up as "Print at <shop>" in every Print dialog.
-// Works without sudo for admin users. Defaults for the queue mirror the job that created it.
+// "Print@ Staples, Eureka": display label plus a CUPS-safe queue name.
+function printerNames(pick) {
+  const short = pick.name.replace(/\s*\(.*?\)\s*/g, ' ').replace(/#\d+/g, '').replace(/\s+/g, ' ').trim();
+  const parts = (pick.address || '').split(',').map(x => x.trim());
+  const city = parts.length >= 3 ? parts[parts.length - 3] : '';
+  const label = `Print@ ${short}${city ? ', ' + city : ''}`;
+  const queue = ('PrintAt_' + `${short}${city ? '_' + city : ''}`.replace(/[^A-Za-z0-9]+/g, '_')).replace(/_+$/, '').slice(0, 60);
+  return { short, city, label, queue };
+}
+
+// Create a CUPS queue pinned to this shop. Works without sudo for admin users.
+// Defaults for the queue mirror the job that created it; location confirmation is off.
 function addPrinter(pick, spec) {
   const { ROOT } = require('./config');
-  const short = pick.name.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-  const city = (pick.address || '').split(',').slice(-3, -2)[0]?.trim() || '';
-  const label = `Print at ${short}${city ? ' ' + city : ''}`;
-  const queue = label.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60);
+  const { short, label, queue } = printerNames(pick);
   const uri = `nearprint://localhost/?shop=${encodeURIComponent(short)}`;
   const args = ['-p', queue, '-E', '-v', uri, '-P', path.join(ROOT, 'ppd', 'NearPrint.ppd'), '-D', label,
     '-L', pick.address || '', '-o', 'printer-is-shared=false', '-o', 'printer-error-policy=retry-job',
     '-o', 'ConfirmLocation=No', '-o', `Priority=${spec.priority}`, '-o', `Delivery=${spec.delivery === 'FindOnly' ? 'Confirm' : spec.delivery}`];
-  const r = spawnSync('lpadmin', args, { encoding: 'utf8', timeout: 30000 });
+  const r = spawnSync('/usr/sbin/lpadmin', args, { encoding: 'utf8', timeout: 30000 });
   if (r.status !== 0) throw new Error(`lpadmin: ${(r.stderr || r.stdout).trim()}`);
   return { queue, label };
 }
 
-module.exports = { sendEmail, openPortal, openMaps, revealPdf, addPrinter };
+module.exports = { sendEmail, openPortal, openMaps, revealPdf, addPrinter, printerNames };

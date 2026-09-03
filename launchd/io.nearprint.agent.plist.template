@@ -11,7 +11,7 @@
   <key>WorkingDirectory</key><string>__ROOT__/agent</string>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>PATH</key><string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>HOME</key><string>__HOME__</string>
   </dict>
   <key>RunAtLoad</key><true/>
