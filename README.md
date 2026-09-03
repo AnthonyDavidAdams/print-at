@@ -5,7 +5,8 @@
 A virtual printer for macOS. Pick **Print@ Nearby** in any Print dialog and the job goes to
 the closest print shop that fits your priorities instead of to a device on your desk. Once a
 shop has been used it becomes its own printer: **Print@ Staples, Eureka**, **Print@ The UPS
-Store, Eureka**. (Repository and internal names still say `nearprint`.)
+Store, Eureka**. (Internal identifiers such as the `nearprint://` device URI and the
+`io.nearprint.agent` launchd label keep the old working name.)
 
 ```
 Print dialog ──> CUPS ──> backend/nearprint (POST to localhost) ──> agent/server.js
@@ -84,7 +85,7 @@ notification when the order has gone out.
 ## Install
 
 ```
-git clone https://github.com/AnthonyDavidAdams/nearprint ~/nearprint
+git clone https://github.com/AnthonyDavidAdams/print-at ~/nearprint
 sudo ~/nearprint/install.sh
 ```
 
