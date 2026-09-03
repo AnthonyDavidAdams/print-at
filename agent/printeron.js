@@ -9,6 +9,7 @@ const { APP_DIR, log } = require('./config');
 const { geocode } = require('./locate');
 
 const CACHE = path.join(APP_DIR, 'printeron.json');
+const DIRECTORY = path.join(__dirname, '..', 'data', 'printeron-us.json');
 const BASE = 'https://www.printeron.net';
 const UA = 'Mozilla/5.0 (Macintosh) Print@';
 const TTL = 7 * 86400e3;
@@ -99,8 +100,46 @@ function miles(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+// The bundled directory (data/printeron-us.json) already has every US printer with its
+// email and color, so when it is present we filter it by distance and skip scraping.
+let DIR = null;
+function loadDirectory() {
+  if (DIR !== null) return DIR;
+  try { DIR = JSON.parse(fs.readFileSync(DIRECTORY, 'utf8')).printers || []; } catch { DIR = []; }
+  return DIR;
+}
+
+async function fromDirectory(loc, radiusMi) {
+  const dir = loadDirectory();
+  if (!dir.length) return null;
+  const home = cityState(loc.address);
+  const withGeo = [];
+  const needGeo = [];
+  for (const p of dir) {
+    const cs = cityState(', ' + p.address) || cityState(p.address + ',');
+    // fast path: same city or state, geocode lazily
+    if (home && p.state !== home.state) continue;
+    needGeo.push(p);
+  }
+  // Geocode only the same-state printers whose city matches the user's or a candidate city set is unknown here,
+  // so bound the work: same city first, then nearest by string, cap the geocoding.
+  const sameCity = home ? needGeo.filter(p => (p.city || '').toLowerCase() === home.city.toLowerCase()) : [];
+  const pool = (sameCity.length ? sameCity : needGeo).slice(0, 40);
+  for (const p of pool) {
+    let lat = p.lat, lon = p.lon;
+    if (lat == null) { try { const g = await geocode(p.address); lat = g.lat; lon = g.lon; } catch { continue; } }
+    const mi = Math.round(miles(loc, { lat, lon }) * 10) / 10;
+    if (mi <= radiusMi) withGeo.push({ ...p, lat, lon, distance_mi: mi });
+  }
+  return withGeo.sort((a, b) => a.distance_mi - b.distance_mi);
+}
+
 // Locations in the user's city plus the cities of the other candidates, within radiusMi.
 async function findNearby(loc, otherAddresses = [], radiusMi = 10) {
+  const local = await fromDirectory(loc, radiusMi);
+  if (local && local.length) { log(`printeron: ${local.length} from bundled directory`); return local; }
+  if (loadDirectory().length) return [];   // directory present but nothing nearby
+
   const home = cityState(loc.address);
   if (!home) return [];
   const cities = new Map();
