@@ -29,6 +29,8 @@ async function get(url, cookie = '') {
     if (jsid) jar = `JSESSIONID=${jsid}`;
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       url = new URL(res.headers.get('location'), url).toString();
+      const pj = (url.match(/;jsessionid=([^?&/]+)/) || [])[1];
+      if (pj) jar = `JSESSIONID=${pj}`;
       continue;
     }
     if (!res.ok) throw new Error(`${res.status} ${url}`);
@@ -50,7 +52,7 @@ function cityState(address) {
 async function cityListing(state, city) {
   const html = String(await get(`${BASE}/system/hotspot_search_frame.jsp?country=US&state=${encodeURIComponent(state)}&city=${encodeURIComponent(city)}`));
   const out = [];
-  const re = /<a[^>]*href="https:\/\/www\.printeron\.net\/([^";]+)[^"]*"[^>]*>([^<]+)<\/a>\s*<br>\s*([\s\S]*?)<\/p>/gi;
+  const re = /<a[^>]*href="https:\/\/www\.printeron\.net\/([^";]+)[^"]*"[^>]*>([^<]+)<\/a>[\s\S]*?<br>\s*([\s\S]*?)<\/p>/gi;
   let m;
   while ((m = re.exec(html))) {
     const addr = strip(m[3]).replace(/\s*UNITED STATES\s*$/i, '').replace(/\s+,/g, ',');
@@ -70,7 +72,16 @@ async function printerInfo(p) {
   const number = alias.replace(/^(\d{3})(\d{3})(\d{3})(\d{3})$/, '$1-$2-$3-$4');
   let email = `${alias.slice(3)}@printspots.com`, color = null, model = '';
   try {
-    const d = strip(String(await get(`${BASE}/Page?FUNCTION=SearchServlet_search&printeraddress=${alias}&urlsearch=true&dd=true&lang=us`, page.cookie)));
+    const sid = page.cookie ? ';jsessionid=' + page.cookie.replace('JSESSIONID=', '') : '';
+    const detailsUrl = `${BASE}/Page${sid}?FUNCTION=SearchServlet_search&printeraddress=${alias}&urlsearch=true&dd=true&lang=us`;
+    let d = strip(String(await get(detailsUrl, page.cookie)));
+    let pnum = (d.match(/Printer Number:\s*([\d-]{11,15})/) || [])[1];
+    if (pnum && pnum !== number) {
+      await get(`${BASE}/system/printspot/interface/select_file.jsp${sid}?url=${encodeURIComponent(p.path)}&printerAlias=${alias}&lang=en-us`, page.cookie);
+      d = strip(String(await get(detailsUrl, page.cookie)));
+      pnum = (d.match(/Printer Number:\s*([\d-]{11,15})/) || [])[1];
+    }
+    if (pnum && pnum !== number) throw new Error(`details mismatch: got ${pnum}, wanted ${number}`);
     const em = d.match(/Email Address:\s*([\w.-]+@printspots\.com)/i);
     if (em) email = em[1];
     const cm = d.match(/Color\/B&W:\s*(Color|Black\s*&\s*White)/i);

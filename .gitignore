@@ -11,3 +11,4 @@ helper/panel/_CodeSignature/
 helper/console/PrintAtConsole
 helper/console/Print@ Console.app/
 helper/console/_CodeSignature/
+data/.printeron-*.progress.json
