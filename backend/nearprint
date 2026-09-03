@@ -47,6 +47,7 @@ done < <(curl -sN --max-time 3600 \
   -H "X-NP-Copies: ${COPIES}" \
   -H "X-NP-Options: $(b64 "$OPTIONS")" \
   -H "X-NP-Printer: ${PRINTER:-NearPrint}" \
+  -H "X-NP-Device-Uri: $(b64 "${DEVICE_URI:-}")" \
   --data-binary "$DATA")
 
 case "$LAST" in

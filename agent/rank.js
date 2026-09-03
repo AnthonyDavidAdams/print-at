@@ -78,7 +78,7 @@ function buildPrompt(job, loc, candidates, cfg) {
 - Paper stock: ${spec.paperStock}; finishing: ${spec.binding}
 - Needed by: ${spec.pickup}
 - Optimize for: ${PRIORITY_TEXT[spec.priority] || PRIORITY_TEXT.Nearest} (priority = ${spec.priority}). Distance still matters as a tiebreaker.
-- Shop type filter already applied: ${spec.shopType}
+- Shop type filter already applied: ${spec.shopType}${job.pin ? `\n- The user printed to a queue pinned to "${job.pin}". Only these candidates are that shop; rank them, do not look for alternatives.` : ''}
 
 ## Where the user is
 ${loc.address || `${loc.lat}, ${loc.lon}`} (from ${loc.source}). Local time now: ${now.toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })}.

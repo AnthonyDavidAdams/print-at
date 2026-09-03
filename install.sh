@@ -16,7 +16,9 @@ echo "==> Building location helper"
 sudo -u "$REAL_USER" bash -c "cd '$ROOT/helper' && swiftc -O main.swift -o nearprint-locate -framework CoreLocation -framework MapKit \
   -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Info.plist 2>&1 | grep -v warning || true; codesign -s - -f nearprint-locate"
 
-echo "==> Installing CUPS backend"
+echo "==> Installing icon + CUPS backend"
+mkdir -p /Library/Printers/Icons
+install -m 0644 "$ROOT/icon/NearPrint.icns" /Library/Printers/Icons/NearPrint.icns
 install -m 0755 -o root -g wheel "$ROOT/backend/nearprint" /usr/libexec/cups/backend/nearprint
 
 echo "==> Registering printer '$PRINTER'"

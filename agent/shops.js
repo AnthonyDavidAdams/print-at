@@ -34,7 +34,18 @@ function norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 // Places MapKit returns for "print" queries that cannot print a document.
 const NOISE = /access point|ship center|shipping center|drop ?box|customer center|fedex ground|fedex freight|amazon (hub|locker)|copier|toner|ink refill|3d print|screen print|t-?shirt|apparel|embroider/i;
 
-async function findCandidates(loc, shopType, maxDistance) {
+async function findCandidates(loc, shopType, maxDistance, pin = '') {
+  // A pinned queue ("Print at Eureka Staples") searches for that shop only and widens
+  // the radius if it is not inside the chosen one.
+  if (pin) {
+    for (const r of [maxDistance, '10mi', '25mi']) {
+      const found = (await findCandidates(loc, 'Any', r)).filter(c => norm(c.name).includes(norm(pin)) || norm(pin).includes(norm(c.name)));
+      if (found.length) return found.slice(0, 3);
+    }
+    const direct = await helper(['search', pin, String(loc.lat), String(loc.lon), String(RADIUS_M['25mi'])]).catch(() => []);
+    return direct.slice(0, 3).map((it, i) => ({ id: `s${i + 1}`, name: it.name, address: it.address, phone: it.phone || '', url: it.url || '', lat: it.lat, lon: it.lon,
+      distance_mi: Math.round(it.distance_m / 160.9) / 10, brand: (chainFor(it.name) || {}).brand || 'independent', portal: (chainFor(it.name) || {}).portal || '', brand_notes: (chainFor(it.name) || {}).notes || '' }));
+  }
   const radius = RADIUS_M[maxDistance] || RADIUS_M['5mi'];
   const queries = QUERIES[shopType] || QUERIES.Any;
   const results = await Promise.all(queries.map(q =>

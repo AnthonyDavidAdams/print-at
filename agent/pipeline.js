@@ -59,6 +59,16 @@ async function pickDialog(ranked, job, spec) {
   }
 }
 
+async function offerPrinter(pick, spec) {
+  try {
+    const { label } = submit.addPrinter(pick, spec);
+    ui.notify(`"${label}" is now a printer in every Print dialog.`, 'Printer added');
+  } catch (e) {
+    log(`add printer failed: ${e.message}`);
+    await ui.dialog(`Could not add the printer:\n\n${e.message}`, ['OK']);
+  }
+}
+
 function writeReceipt(job, lines) {
   const p = path.join(job.dir, 'receipt.md');
   fs.writeFileSync(p, `# NearPrint receipt — ${job.title}\n\n${lines.join('\n')}\n`);
@@ -92,7 +102,7 @@ async function run(job, cfg, report = () => {}) {
   log(`job ${job.id}: location ${loc.address} via ${loc.source}`);
 
   report(`Searching within ${spec.maxDistance} of ${loc.address}`);
-  const candidates = await findCandidates(loc, spec.shopType, spec.maxDistance);
+  const candidates = await findCandidates(loc, spec.shopType, spec.maxDistance, job.pin);
   log(`job ${job.id}: ${candidates.length} candidates`);
   if (!candidates.length) {
     if (interactive) await ui.dialog(`No print shops found within ${spec.maxDistance} of ${loc.address}. Try a larger search radius in the print dialog.`, ['OK']);
@@ -118,9 +128,10 @@ async function run(job, cfg, report = () => {}) {
   if (spec.delivery === 'FindOnly') {
     report(`Found: ${pick.name}, ${summary(pick)}`);
     if (interactive) {
-      const btn = await ui.dialog(`Top picks for "${job.title}":\n\n` + ranked.slice(0, 3).map((r, i) => `${i + 1}. ${r.name}\n   ${r.address}\n   ${summary(r)}`).join('\n\n'), ['Done', 'Reveal PDF', 'Open #1 in Maps'], 'Open #1 in Maps');
+      submit.revealPdf(job.pdf);
+      const btn = await ui.dialog(`Top picks for "${job.title}" (PDF is selected in Finder):\n\n` + ranked.slice(0, 3).map((r, i) => `${i + 1}. ${r.name}\n   ${r.address}\n   ${summary(r)}`).join('\n\n'), ['Done', 'Add #1 as printer', 'Open #1 in Maps'], 'Open #1 in Maps');
       if (btn === 'Open #1 in Maps') submit.openMaps(pick);
-      if (btn === 'Reveal PDF') submit.revealPdf(job.pdf);
+      if (btn === 'Add #1 as printer') await offerPrinter(pick, spec);
     }
     job.result = { status: 'found', shop: pick.name, method: 'find_only' };
     return writeReceipt(job, receipt);
@@ -152,12 +163,17 @@ async function run(job, cfg, report = () => {}) {
       receipt.push(`Sent: ${out}`, '', '### Email', `Subject: ${subject}`, '', body);
       job.result = { status: 'sent', shop: pick.name, method: 'email', to: s.email };
       ui.notify(`Order emailed to ${pick.name}. They will reply to confirm price and pickup time.`, 'Sent');
-      if (interactive && await ui.dialog(`Order emailed to ${pick.name} (${s.email}).\n\nThey will reply to ${cfg.contactEmail} with price and ready time. A copy was cc'd to you.`, ['Open in Maps', 'OK'], 'OK') === 'Open in Maps') submit.openMaps(pick);
+      if (interactive) {
+        const btn = await ui.dialog(`Order emailed to ${pick.name} (${s.email}).\n\nThey will reply to ${cfg.contactEmail} with price and ready time. A copy was cc'd to you.`, ['Open in Maps', 'Add as printer', 'OK'], 'OK');
+        if (btn === 'Open in Maps') submit.openMaps(pick);
+        if (btn === 'Add as printer') await offerPrinter(pick, spec);
+      }
     } else if (s.method === 'portal' && s.url) {
       submit.openPortal(s.url, job.pdf);
       receipt.push(`Opened portal ${s.url}; PDF revealed in Finder and its path copied to the clipboard.`);
       job.result = { status: 'portal_opened', shop: pick.name, method: 'portal', url: s.url };
       ui.notify(`Upload page opened for ${pick.name}. Your PDF is selected in Finder; drag it into the uploader.`, 'Almost there');
+      if (interactive && await ui.dialog(`Upload page opened for ${pick.name}. Drag the selected PDF into it.`, ['Add as printer', 'OK'], 'OK') === 'Add as printer') await offerPrinter(pick, spec);
     } else {
       submit.revealPdf(job.pdf);
       const phone = s.phone || pick.phone || 'no phone listed';

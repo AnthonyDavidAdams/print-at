@@ -38,6 +38,17 @@ function countPages(pdfPath) {
   return 0;
 }
 
+// Queue defaults (*DefaultPriority etc. in the installed PPD) are not passed to the
+// backend unless the dialog sets them explicitly, so read them straight from the PPD.
+function ppdDefaults(printer) {
+  const out = {};
+  try {
+    const ppd = fs.readFileSync(`/etc/cups/ppd/${printer}.ppd`, 'latin1');
+    for (const m of ppd.matchAll(/^\*Default(\w+):\s*(\S+)/gm)) out[m[1]] = m[2];
+  } catch {}
+  return out;
+}
+
 function buildSpec(opts, copiesHeader, pdfPath) {
   const dup = opts.Duplex || opts.sides || 'None';
   return {
@@ -86,11 +97,16 @@ const server = http.createServer((req, res) => {
     const safeTitle = title.replace(/[^\w.\- ]+/g, '_').slice(0, 80) || 'document';
     const pdfPath = path.join(dir, `${safeTitle}.pdf`);
     fs.writeFileSync(pdfPath, pdf);
-    const opts = parseOptions(b64(req.headers['x-np-options']));
+    const printer = req.headers['x-np-printer'] || 'NearPrint';
+    const opts = { ...ppdDefaults(printer), ...parseOptions(b64(req.headers['x-np-options'])) };
+    // A queue created for one shop carries it in its device URI: nearprint://localhost/?shop=Staples
+    let pin = '';
+    try { pin = new URL(b64(req.headers['x-np-device-uri'])).searchParams.get('shop') || ''; } catch {}
     const job = {
       id, dir, pdf: pdfPath, title,
       user: b64(req.headers['x-np-user']),
-      printer: req.headers['x-np-printer'] || 'NearPrint',
+      printer,
+      pin,
       receivedAt: new Date().toISOString(),
       options: opts,
       spec: buildSpec(opts, req.headers['x-np-copies'], pdfPath),

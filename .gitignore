@@ -4,3 +4,4 @@ helper/*.o
 node_modules/
 *.log
 helper/_CodeSignature/
+icon/NearPrint.iconset/

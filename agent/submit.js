@@ -32,4 +32,21 @@ function revealPdf(pdfPath) {
   try { execFileSync('open', ['-R', pdfPath]); } catch {}
 }
 
-module.exports = { sendEmail, openPortal, openMaps, revealPdf };
+// Create a CUPS queue pinned to this shop: shows up as "Print at <shop>" in every Print dialog.
+// Works without sudo for admin users. Defaults for the queue mirror the job that created it.
+function addPrinter(pick, spec) {
+  const { ROOT } = require('./config');
+  const short = pick.name.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  const city = (pick.address || '').split(',').slice(-3, -2)[0]?.trim() || '';
+  const label = `Print at ${short}${city ? ' ' + city : ''}`;
+  const queue = label.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60);
+  const uri = `nearprint://localhost/?shop=${encodeURIComponent(short)}`;
+  const args = ['-p', queue, '-E', '-v', uri, '-P', path.join(ROOT, 'ppd', 'NearPrint.ppd'), '-D', label,
+    '-L', pick.address || '', '-o', 'printer-is-shared=false', '-o', 'printer-error-policy=retry-job',
+    '-o', 'ConfirmLocation=No', '-o', `Priority=${spec.priority}`, '-o', `Delivery=${spec.delivery === 'FindOnly' ? 'Confirm' : spec.delivery}`];
+  const r = spawnSync('lpadmin', args, { encoding: 'utf8', timeout: 30000 });
+  if (r.status !== 0) throw new Error(`lpadmin: ${(r.stderr || r.stdout).trim()}`);
+  return { queue, label };
+}
+
+module.exports = { sendEmail, openPortal, openMaps, revealPdf, addPrinter };

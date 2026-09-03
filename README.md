@@ -33,6 +33,30 @@ Page Setup on macOS only carries paper size, orientation and scale, so the dispa
 settings live in the printer-options pane of the Print dialog. Save them as a Preset
 ("Cheapest, this week") and it becomes one click.
 
+## One printer per shop
+
+Any shop NearPrint finds can become its own printer, so the Print dialog's printer menu
+reads like a list of places: **Print at Staples**, **Print at The UPS Store**, **Print at
+Bug Press**. Each is a normal queue with the same options, pinned to that shop through its
+device URI (`nearprint://localhost/?shop=Staples`), with the location confirmation off and
+the priority and delivery defaults copied from the job that created it.
+
+- In the dialog after a job: **Add as printer** (or **Add #1 as printer** in find-only mode).
+- From a terminal: `~/nearprint/nearprint-add "Staples" Price Auto` (shop, priority, delivery).
+- Remove one: `lpadmin -x Print_at_Staples`.
+
+Printing to a pinned queue skips the search, verifies that shop's hours, price and ordering
+method, and sends. If the shop is not within the search radius the agent widens to 25 miles.
+
+## What you see while it runs
+
+The Print dialog closes when you click Print, as it does for every printer. The job then
+sits in the NearPrint queue window (the printer icon in the Dock) with a live status line:
+"Locating you", "Checking hours, prices and how to order at 8 places", "Waiting for your OK:
+The UPS Store, 1.3 mi, open now, est. $1.70", "Emailed to The UPS Store". It leaves the queue
+only when dispatch is finished. Cancelling the job there cancels the dispatch and closes any
+NearPrint dialog. Failures stay in the queue with the reason.
+
 ## Requirements
 
 - macOS 13 or later (tested on 15.6). PPD printers are deprecated by Apple but still work.

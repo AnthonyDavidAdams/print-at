@@ -23,6 +23,7 @@
 *cupsFilter: "application/pdf 0 -"
 *cupsModelNumber: 1
 *cupsLanguages: "en"
+*APPrinterIconPath: "/Library/Printers/Icons/NearPrint.icns"
 
 *DefaultResolution: 600dpi
 *Resolution 600dpi/600 dpi: "<</HWResolution[600 600]>>setpagedevice"
