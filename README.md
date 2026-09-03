@@ -119,7 +119,8 @@ PRINTAT_DRY_RUN=1 PRINTAT_SKIP_CLAUDE=1 node ~/printat/agent/server.js   # dista
 
 ## Console
 
-`http://127.0.0.1:4243/` lists every Print@ printer with its pinned shop and defaults,
+**Print@ Console** in `~/Applications` (Spotlight finds it; there is also a Console button in
+the job window) is a native window around `http://127.0.0.1:4243/`. It lists every Print@ printer with its pinned shop and defaults,
 the remembered shops (what "Print@ Nearby" will reuse instead of searching), the verified
 shop facts, and recent jobs, with Remove and Forget buttons and an Add printer form. The
 same printers show up in System Settings › Printers & Scanners, where they can be renamed

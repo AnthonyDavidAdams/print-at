@@ -14,7 +14,7 @@ if [ "$(id -u)" -ne 0 ]; then echo "Run with sudo: sudo $0"; exit 1; fi
 
 echo "==> Building location helper and panel"
 sudo -u "$REAL_USER" bash -c "cd '$ROOT/helper' && swiftc -O main.swift -o printat-locate -framework CoreLocation -framework MapKit \
-  -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Info.plist 2>&1 | grep -v warning || true; codesign -s - -f printat-locate; cd '$ROOT/helper/panel' && swiftc -O main.swift -o PrintAtPanel -framework SwiftUI -framework AppKit 2>&1 | grep -v warning || true; mkdir -p PrintAt.app/Contents/MacOS PrintAt.app/Contents/Resources; cp PrintAtPanel PrintAt.app/Contents/MacOS/PrintAtPanel; cp Bundle-Info.plist PrintAt.app/Contents/Info.plist; cp '$ROOT/icon/PrintAt.icns' PrintAt.app/Contents/Resources/PrintAt.icns; codesign -s - -f --deep PrintAt.app"
+  -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Info.plist 2>&1 | grep -v warning || true; codesign -s - -f printat-locate; cd '$ROOT/helper/panel' && swiftc -O main.swift -o PrintAtPanel -framework SwiftUI -framework AppKit 2>&1 | grep -v warning || true; mkdir -p PrintAt.app/Contents/MacOS PrintAt.app/Contents/Resources; cp PrintAtPanel PrintAt.app/Contents/MacOS/PrintAtPanel; cp Bundle-Info.plist PrintAt.app/Contents/Info.plist; cp '$ROOT/icon/PrintAt.icns' PrintAt.app/Contents/Resources/PrintAt.icns; codesign -s - -f --deep PrintAt.app; cd '$ROOT/helper/console' && swiftc -O main.swift -o PrintAtConsole -framework AppKit -framework WebKit 2>&1 | grep -v warning || true; rm -rf 'Print@ Console.app'; mkdir -p 'Print@ Console.app/Contents/MacOS' 'Print@ Console.app/Contents/Resources'; cp PrintAtConsole 'Print@ Console.app/Contents/MacOS/'; cp Bundle-Info.plist 'Print@ Console.app/Contents/Info.plist'; cp '$ROOT/icon/PrintAt.icns' 'Print@ Console.app/Contents/Resources/PrintAt.icns'; codesign -s - -f --deep 'Print@ Console.app'; mkdir -p '$REAL_HOME/Applications'; rm -rf '$REAL_HOME/Applications/Print@ Console.app'; cp -R 'Print@ Console.app' '$REAL_HOME/Applications/'"
 
 echo "==> Installing icon + CUPS backend"
 mkdir -p /Library/Printers/Icons
@@ -58,6 +58,6 @@ sleep 1
 if curl -sf "http://127.0.0.1:4243/health" >/dev/null; then echo "    agent is up"; else echo "    agent did not answer on :4243 — check ~/Library/Logs/PrintAt/"; fi
 
 echo
-echo "Done. 'Print@ Nearby' is now a printer in every Print dialog."
+echo "Done. 'Print@ Nearby' is now a printer in every Print dialog. 'Print@ Console' is in ~/Applications."
 echo "Options live under the printer-options section of the Print dialog (Priority, radius, shop type, delivery)."
 echo "Test from a terminal:  lp -d PrintAt -o Priority=Price -o Delivery=Confirm some.pdf"

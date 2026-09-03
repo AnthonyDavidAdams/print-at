@@ -8,3 +8,6 @@ icon/*.iconset/
 helper/panel/PrintAtPanel
 helper/panel/PrintAt.app/
 helper/panel/_CodeSignature/
+helper/console/PrintAtConsole
+helper/console/Print@ Console.app/
+helper/console/_CodeSignature/

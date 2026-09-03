@@ -83,6 +83,11 @@ struct ContentView: View {
                 Text("™").font(.system(size: 10, weight: .semibold)).baselineOffset(8)
                 Spacer()
                 Text(m.state.title).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                Button("Console") {
+                    let app = NSHomeDirectory() + "/Applications/Print@ Console.app"
+                    if FileManager.default.fileExists(atPath: app) { NSWorkspace.shared.open(URL(fileURLWithPath: app)) }
+                    else { NSWorkspace.shared.open(URL(string: "http://127.0.0.1:\(m.port)/")!) }
+                }.controlSize(.small)
             }
             Divider()
             Group {
