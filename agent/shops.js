@@ -1,6 +1,7 @@
 'use strict';
 const { helper } = require('./locate');
 const printeron = require('./printeron');
+const printme = require('./printme');
 const { log } = require('./config');
 
 // Brand knowledge Claude gets as hints. Portal URLs are the public upload entry points.
@@ -90,13 +91,33 @@ async function findCandidates(loc, shopType, maxDistance, pin = '') {
       const radiusMi = radius / 1609;
       const near = await printeron.findNearby(loc, mapped.map(m => m.address), radiusMi);
       const seen = new Set(mapped.map(m => norm(m.address).slice(0, 14)));
+      const fresh = near.filter(p => !seen.has(norm(p.address).slice(0, 14))).slice(0, 6);
+      // Confirm each is online right now before offering it; a directory entry can be hours stale.
+      const live = await Promise.all(fresh.map(async p => ({ p, live: p.alias ? await printeron.isLive(p) : false })));
+      let n = 0;
+      for (const { p, live: ok } of live) {
+        if (ok === false) { log(`printeron: ${p.name} is offline now, skipping`); continue; }
+        const c = printeron.asCandidate(p, n++);
+        if (ok === null) c.brand_notes += ' (could not confirm it is online right now)';
+        mapped.push(c);
+      }
+      if (n) log(`printeron: added ${n} live location(s)`);
+    } catch (e) { log(`printeron lookup skipped: ${e.message}`); }
+  }
+  if (shopType === 'Any' || shopType === 'Chains') {
+    try {
+      const near = printme.findNearby(loc, radius / 1609);
+      const seen = new Set(mapped.map(m => norm(m.address).slice(0, 14)));
       let n = 0;
       for (const p of near) {
-        if (seen.has(norm(p.address).slice(0, 14))) continue;
-        mapped.push(printeron.asCandidate(p, n++));
+        const k = norm(p.address).slice(0, 14);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        mapped.push(printme.asCandidate(p, n++));
+        if (n >= 6) break;
       }
-      if (n) log(`printeron: added ${n} location(s)`);
-    } catch (e) { log(`printeron lookup skipped: ${e.message}`); }
+      if (n) log(`printme: added ${n} kiosk(s)`);
+    } catch (e) { log(`printme lookup skipped: ${e.message}`); }
   }
   return mapped;
 }

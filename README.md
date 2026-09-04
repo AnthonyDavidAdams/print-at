@@ -156,6 +156,14 @@ and are offered directly only when nothing automatable exists nearby.
   cents a page at the release station, hotels are often free for guests. Refresh with
   `node printat-printeron-sync ALL` (or `US`), watched on the WOPR board at
   `http://127.0.0.1:4243/sync`.
+- **PrintMe**: the other public-printing network (EFI/Fiery), powering Office Depot, Staples
+  kiosks, libraries and campuses. Print@ ships its directory (`data/printme-us.json`, ~1,980
+  US/Canada kiosks) pulled from PrintMe's own JSON API, so nearby kiosks appear instantly.
+  Where the brand's central email is known (Staples: staples@printme.com) the PDF is emailed
+  and a release barcode comes back to you; otherwise the result points you to the PrintMe app
+  and the nearest kiosk. Refresh with `node printat-printme-sync us`.
+- **Central chain email-to-print**: FedEx Office (printandgo@fedex.com) and Staples
+  (staples@printme.com) take one email and release the job at any store kiosk with a code.
 - **Your own emails**: know a store's order address the agent could not find (a local CVS,
   Walmart or Walgreens photo counter, say)? Enter it in the console next to that shop, or
   pass it when creating a pinned printer (`printat-add "CVS" Nearest Confirm Eureka

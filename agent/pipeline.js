@@ -184,16 +184,20 @@ async function run(job, cfg, report = () => {}) {
     try {
       if (s.method === 'email' && s.email) {
         const isPrinterOn = !!pick.printeron || /@printspots\.com$/i.test(s.email);
-        const subject = isPrinterOn ? job.title : (pick.email_subject || `Print order: ${job.title} (${spec.pages || '?'} pp x ${spec.copies}, ${spec.color ? 'color' : 'B&W'})`);
-        const body = isPrinterOn ? 'Print the attached document.' : pick.email_body || `Hello,\n\nPlease print the attached PDF: ${spec.pages || '?'} pages, ${spec.copies} copies, ${spec.color ? 'full color' : 'black and white'}, ${spec.duplex ? 'two-sided' : 'single-sided'}, ${spec.paperStock} paper, ${spec.binding}. Needed ${spec.pickup}.\n\nPlease reply with the price and when it will be ready. Pickup name: ${cfg.contactName}${cfg.contactPhone ? ', ' + cfg.contactPhone : ''}.\n\nThanks,\n${cfg.contactName}`;
+        const isPrintMe = !!pick.printme || /@printme\.com$/i.test(s.email || '');
+        const releaseStyle = isPrinterOn || isPrintMe;
+        const subject = releaseStyle ? job.title : (pick.email_subject || `Print order: ${job.title} (${spec.pages || '?'} pp x ${spec.copies}, ${spec.color ? 'color' : 'B&W'})`);
+        const body = releaseStyle ? 'Print the attached document.' : pick.email_body || `Hello,\n\nPlease print the attached PDF: ${spec.pages || '?'} pages, ${spec.copies} copies, ${spec.color ? 'full color' : 'black and white'}, ${spec.duplex ? 'two-sided' : 'single-sided'}, ${spec.paperStock} paper, ${spec.binding}. Needed ${spec.pickup}.\n\nPlease reply with the price and when it will be ready. Pickup name: ${cfg.contactName}${cfg.contactPhone ? ', ' + cfg.contactPhone : ''}.\n\nThanks,\n${cfg.contactName}`;
         const out = submit.sendEmail({ to: s.email, cc: cfg.ccSelf ? cfg.contactEmail : '', subject, body, attachment: job.pdf, cfg });
         receipt.push(`Sent: ${out}`, '', '### Email', `Subject: ${subject}`, '', body);
         job.result = { status: 'sent', shop: pick.name, method: 'email', to: s.email };
         memory.remember(loc, spec, pick);
-        ui.notify(isPrinterOn ? `Sent to the PrinterOn printer at ${pick.name}. Watch your email for the release code.` : `Order emailed to ${pick.name}. They will reply with price and pickup time.`, 'Sent');
+        ui.notify(releaseStyle ? `Sent to ${pick.name} via ${isPrintMe ? 'PrintMe' : 'PrinterOn'}. Watch your email for the release code.` : `Order emailed to ${pick.name}. They will reply with price and pickup time.`, 'Sent');
         if (ux) {
           const added = autoAddPrinter(pick, spec, receipt);
-          const text = isPrinterOn
+          const text = isPrintMe
+            ? `Sent to ${pick.name} via PrintMe (${s.email}).\n\nPrintMe will email a release code to ${cfg.contactEmail}. Enter it at the self-service kiosk in any ${pick.printme ? pick.printme.merchant : 'store'} and pay there. Nearest one:\n${pick.address}${added}`
+            : isPrinterOn
             ? `Sent to the PrinterOn printer at ${pick.name} (${s.email}).\n\nPrinterOn will email a 6-digit release code to ${cfg.contactEmail}. Take it to the business center or front desk at:\n${pick.address}${added}`
             : `Order emailed to ${pick.name} (${s.email}).\n\nThey will reply to ${cfg.contactEmail} with price and ready time. A copy was cc'd to you.${added}`;
           const act = await ux.result(text, [{ key: 'maps', label: 'Open in Maps' }, { key: 'done', label: 'Done' }]);
