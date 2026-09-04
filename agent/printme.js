@@ -15,10 +15,11 @@ const EMAILS = {
   'office depot': 'officedepot@printme.com',
   'officemax': 'officedepot@printme.com',
 };
+const GENERIC = 'print@printme.com';   // works at any PrintMe-enabled printer, any brand
 function emailFor(merchant) {
   const m = (merchant || '').toLowerCase();
   for (const k of Object.keys(EMAILS)) if (m.includes(k)) return EMAILS[k];
-  return '';
+  return GENERIC;
 }
 
 let DIR = null;
@@ -51,6 +52,7 @@ function findNearby(loc, radiusMi = 10) {
 function asCandidate(p, i) {
   const email = emailFor(p.merchant);
   const brand = p.merchant;
+  const branded = email !== 'print@printme.com';
   return {
     id: `m${i + 1}`,
     name: `${brand}${/office depot|staples/i.test(brand) ? '' : ''}`.trim() + (p.name && !/^\d/.test(p.name) ? ` (${p.name})` : ''),
@@ -58,10 +60,8 @@ function asCandidate(p, i) {
     phone: p.phone || '', url: 'https://www.printme.com/',
     lat: p.lat, lon: p.lon, distance_mi: p.distance_mi,
     brand: 'PrintMe',
-    portal: email ? '' : 'https://www.printme.com/',
-    brand_notes: email
-      ? `PrintMe kiosk at ${brand}. Order by emailing the PDF to ${email}; a release code (barcode) comes back by email; release it yourself at the self-service kiosk in any ${brand} and pay there (often ~$0.19/pg B&W, ~$0.79-0.99 color).`
-      : `PrintMe kiosk at ${brand}. Upload via the PrintMe app or printme.com, then release at the kiosk with the PIN. No central order email verified for this brand.`,
+    portal: '',
+    brand_notes: `PrintMe kiosk at ${brand}. Order by emailing the PDF to ${email}; a release code comes back by email; enter it at the self-service kiosk${branded ? ` in any ${brand}` : ' at this PrintMe location'} and pay there (often ~$0.19/pg B&W, ~$0.79-0.99 color).`,
     printme: { merchant: brand, email },
   };
 }
