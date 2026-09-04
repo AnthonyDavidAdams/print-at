@@ -87,14 +87,19 @@
   .brands:before,.brands:after{content:"";position:absolute;top:0;bottom:0;width:120px;z-index:2}
   .brands:before{left:0;background:linear-gradient(90deg,var(--bg),transparent)}
   .brands:after{right:0;background:linear-gradient(270deg,var(--bg),transparent)}
-  .track{display:flex;gap:26px;width:max-content;animation:scroll 34s linear infinite;align-items:center}
+  .track{display:flex;gap:56px;width:max-content;animation:scroll 40s linear infinite;align-items:center}
   .brands:hover .track{animation-play-state:paused}
   @keyframes scroll{to{transform:translateX(-50%)}}
-  .chip{display:flex;align-items:center;justify-content:center;height:66px;padding:0 26px;background:#fff;border-radius:14px;box-shadow:0 6px 20px rgba(0,0,0,.35)}
-  .chip img{height:30px;width:auto;display:block}
-  .chip.net{background:#0f1522;border:1px solid var(--line);font-weight:700;font-size:22px;letter-spacing:-.4px}
-  .chip.net.printeron{color:#ff6b4a}.chip.net.printme{color:#a97bff}
-  .chip.cat{background:#0f1522;border:1px solid var(--line);color:var(--dim);font-weight:600;font-size:16px;letter-spacing:.3px}
+  .lg{display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .lg img{width:auto;display:block;filter:brightness(0) invert(1);opacity:.62;transition:.35s}
+  .lg:hover img{filter:none;opacity:1}
+  .lg img{height:30px}
+  .lg.big img{height:46px}
+  .lg.mid img{height:38px}
+  .net{font-weight:700;font-size:24px;letter-spacing:-.5px;color:#c3ccdb;transition:.35s;flex:0 0 auto}
+  .net:hover.printeron{color:#ff6b4a}.net:hover.printme{color:#a97bff}
+  .cat{display:flex;align-items:center;gap:9px;color:#8794a8;font-weight:600;font-size:15px;letter-spacing:.4px;text-transform:uppercase;transition:.35s;flex:0 0 auto}
+  .cat:hover{color:#c3ccdb}.cat svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6}
 
   /* stats */
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:70px 0}
@@ -254,18 +259,26 @@
 
 <script>
   // brand marquee (duplicated for seamless loop)
+  var book = '<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9v16H6a2 2 0 0 0-2 2zM15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2h-3"/></svg>';
+  var printer = '<svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z"/></svg>';
   var brands = [
-    '<span class="chip"><img src="assets/logos/fedex.svg" alt="FedEx Office"></span>',
-    '<span class="chip"><img src="assets/logos/staples.svg" alt="Staples"></span>',
-    '<span class="chip"><img src="assets/logos/ups.svg" alt="UPS"></span>',
-    '<span class="chip"><img src="assets/logos/officedepot.svg" alt="Office Depot"></span>',
-    '<span class="chip net printeron">PrinterOn</span>',
-    '<span class="chip net printme">PrintMe</span>',
-    '<span class="chip cat">Hotel business centers</span>',
-    '<span class="chip cat">Public libraries</span>',
-    '<span class="chip cat">Local copy shops</span>'
+    '<a class="lg big" href="#"><img src="assets/logos/fedex.svg" alt="FedEx Office"></a>',
+    '<a class="lg" href="#"><img src="assets/logos/staples.svg" alt="Staples"></a>',
+    '<a class="lg big" href="#"><img src="assets/logos/ups.svg" alt="UPS"></a>',
+    '<a class="lg mid" href="#"><img src="assets/logos/officedepot.svg" alt="Office Depot"></a>',
+    '<a class="lg mid" href="#"><img src="assets/logos/printeron.png" alt="PrinterOn"></a>',
+    '<a class="lg mid" href="#"><img src="assets/logos/printme.svg" alt="PrintMe"></a>',
+    '<a class="lg mid" href="#"><img src="assets/logos/hilton.svg" alt="Hilton"></a>',
+    '<a class="lg mid" href="#"><img src="assets/logos/marriott.svg" alt="Marriott"></a>',
+    '<a class="lg" href="#"><img src="assets/logos/hyatt.svg" alt="Hyatt"></a>',
+    '<a class="lg" href="#"><img src="assets/logos/holidayinn.svg" alt="Holiday Inn Express"></a>',
+    '<a class="lg" href="#"><img src="assets/logos/bestwestern.svg" alt="Best Western"></a>',
+    '<span class="cat">'+book+'Public Libraries</span>',
+    '<span class="cat">'+printer+'Local Copy Shops</span>'
   ];
-  document.getElementById('track').innerHTML = (brands.join('') + brands.join(''));
+  var t=document.getElementById('track');
+  t.innerHTML = (brands.join('') + brands.join(''));
+  t.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault()})});
 
   // count-up stats
   function countUp(el){
