@@ -1,15 +1,138 @@
 {
   "network": "EnvisionWare MobilePrint (ewprints.com) + Princh",
-  "note": "Per-library email-to-print. No central directory exists; each library publishes its own code on its own site. This seed is verified from library websites; extend it by pull request. The agent also resolves unknown libraries live at job time.",
-  "pattern": "<stem>-bw@ewprints.com (black & white), <stem>-color@ewprints.com (color), <stem>-bw-duplex@ewprints.com (two-sided). Send the PDF, a release code returns by email, release at the library.",
+  "note": "Per-library email-to-print. No central directory exists; each library publishes its own code on its own site. Verified from library websites; extend by pull request. The agent also resolves unknown libraries live at job time.",
+  "pattern": "Usually <stem>-bw@ewprints.com (b&w) and <stem>-color@ewprints.com (color); some libraries deviate (dots, -legal, -duplex). Send the PDF, a release code returns by email, release at the library.",
   "libraries": [
-    { "name": "New York Public Library", "aliases": ["nypl"], "state": "NY", "stems": ["nyplblc", "nyplgd"], "note": "Per-branch codes; nyplblc / nyplgd are two branches." },
-    { "name": "Keller Public Library", "city": "Keller", "state": "TX", "stems": ["kpl"] },
-    { "name": "Ridgewood Public Library", "city": "Ridgewood", "state": "NJ", "stems": ["ridgewood_library"] },
-    { "name": "Franklin Township Public Library", "city": "Somerset", "state": "NJ", "stems": ["demottprint"] },
-    { "name": "Bryant Library", "city": "Roslyn", "state": "NY", "stems": ["tbl"] },
-    { "name": "Rye Free Reading Room", "city": "Rye", "state": "NY", "stems": ["rye"] },
-    { "name": "Charlotte Hall Library", "city": "Charlotte Hall", "state": "MD", "stems": ["hall"] },
-    { "name": "Howard County Library", "city": "Columbia", "state": "MD", "stems": ["howard"] }
+    {
+      "name": "New York Public Library",
+      "aliases": [
+        "nypl"
+      ],
+      "state": "NY",
+      "stems": [
+        "nyplblc",
+        "nyplgd"
+      ],
+      "note": "Per-branch codes."
+    },
+    {
+      "name": "Keller Public Library",
+      "city": "Keller",
+      "state": "TX",
+      "stems": [
+        "kpl"
+      ]
+    },
+    {
+      "name": "Ridgewood Public Library",
+      "city": "Ridgewood",
+      "state": "NJ",
+      "stems": [
+        "ridgewood_library"
+      ]
+    },
+    {
+      "name": "Franklin Township Public Library",
+      "city": "Somerset",
+      "state": "NJ",
+      "stems": [
+        "demottprint"
+      ]
+    },
+    {
+      "name": "Bryant Library",
+      "city": "Roslyn",
+      "state": "NY",
+      "stems": [
+        "tbl"
+      ]
+    },
+    {
+      "name": "Rye Free Reading Room",
+      "city": "Rye",
+      "state": "NY",
+      "stems": [
+        "rye"
+      ]
+    },
+    {
+      "name": "Charlotte Hall Library",
+      "city": "Charlotte Hall",
+      "state": "MD",
+      "stems": [
+        "hall"
+      ]
+    },
+    {
+      "name": "Howard County Library",
+      "city": "Columbia",
+      "state": "MD",
+      "stems": [
+        "howard"
+      ]
+    },
+    {
+      "name": "Wheaton Public Library",
+      "city": "Wheaton",
+      "state": "IL",
+      "stems": [
+        "wpl"
+      ]
+    },
+    {
+      "name": "Beaver Dam Community Library",
+      "city": "Beaver Dam",
+      "state": "WI",
+      "stems": [
+        "bdcl"
+      ]
+    },
+    {
+      "name": "West Orange Public Library",
+      "city": "West Orange",
+      "state": "NJ",
+      "stems": [
+        "wopl"
+      ]
+    },
+    {
+      "name": "East Hampton Public Library",
+      "city": "East Hampton",
+      "state": "NY",
+      "stems": [
+        "easthamptonlibrary"
+      ]
+    },
+    {
+      "name": "East Hampton Library",
+      "city": "East Hampton",
+      "state": "NY",
+      "stems": [
+        "ehl"
+      ]
+    },
+    {
+      "name": "Hoboken Public Library",
+      "city": "Hoboken",
+      "state": "NJ",
+      "bw": "hoboken.bw@ewprints.com",
+      "color": "hoboken.color@ewprints.com"
+    },
+    {
+      "name": "Tualatin Public Library",
+      "city": "Tualatin",
+      "state": "OR",
+      "stems": [
+        "TULPrinting"
+      ]
+    },
+    {
+      "name": "Jacksonville Public Library",
+      "city": "Jacksonville",
+      "state": "FL",
+      "stems": [
+        "jaxpl"
+      ]
+    }
   ]
 }

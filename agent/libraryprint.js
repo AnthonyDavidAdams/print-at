@@ -30,6 +30,7 @@ function lookup(name, city, state) {
     const nameHit = n.includes(ln) || ln.includes(n) || (lib.aliases || []).some(a => n.includes(norm(a)));
     const geoOk = !lib.state || !state || lib.state === state;
     if (nameHit && geoOk) {
+      if (lib.bw) return { name: lib.name, email: lib.bw, colorEmail: lib.color || lib.bw, note: lib.note || '' };
       const addr = addresses(lib.stems[0]);
       return { name: lib.name, stems: lib.stems, email: addr.bw, colorEmail: addr.color, note: lib.note || '' };
     }
