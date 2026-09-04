@@ -12,6 +12,8 @@ const DIR_WORLD = path.join(__dirname, '..', 'data', 'printme-world.json');
 // Verified central email-to-print addresses (send here, release at any of that brand's kiosks).
 const EMAILS = {
   'staples': 'staples@printme.com',
+  'office depot': 'officedepot@printme.com',
+  'officemax': 'officedepot@printme.com',
 };
 function emailFor(merchant) {
   const m = (merchant || '').toLowerCase();
