@@ -2,6 +2,7 @@
 const { helper } = require('./locate');
 const printeron = require('./printeron');
 const printme = require('./printme');
+const libraryprint = require('./libraryprint');
 const { log } = require('./config');
 
 // Brand knowledge Claude gets as hints. Portal URLs are the public upload entry points.
@@ -120,6 +121,7 @@ async function findCandidates(loc, shopType, maxDistance, pin = '') {
       if (n) log(`printme: added ${n} kiosk(s)`);
     } catch (e) { log(`printme lookup skipped: ${e.message}`); }
   }
+  for (const c of mapped) libraryprint.enrich(c);
   return mapped;
 }
 
