@@ -133,6 +133,244 @@
       "stems": [
         "jaxpl"
       ]
+    },
+    {
+      "name": "Fayetteville Public Library",
+      "stems": [
+        "faylib-fpl"
+      ],
+      "website": "http://faylib.org/",
+      "harvested": true
+    },
+    {
+      "name": "New Orleans Public Library",
+      "state": "Orleans Parish",
+      "stems": [
+        "nopl_main",
+        "nopl_ar",
+        "nopl_av",
+        "nopl_cc",
+        "nopl_crc",
+        "nopl_eno",
+        "nopl_hb",
+        "nopl_ke",
+        "nopl_mlk",
+        "nopl_la",
+        "nopl_nm",
+        "nopl_mc",
+        "nopl_nv",
+        "nopl_nx",
+        "nopl_sm"
+      ],
+      "website": "https://www.nolalibrary.org/",
+      "harvested": true
+    },
+    {
+      "name": "Chillicothe And Ross County Public Library",
+      "stems": [
+        "mainlib",
+        "nslib"
+      ],
+      "website": "https://www.crcpl.org/",
+      "harvested": true
+    },
+    {
+      "name": "Forbes Library",
+      "state": "Hampshire County",
+      "stems": [
+        "nomain"
+      ],
+      "website": "https://forbeslibrary.org",
+      "harvested": true
+    },
+    {
+      "name": "Salem Public Library",
+      "state": "Essex County",
+      "stems": [
+        "salempl"
+      ],
+      "website": "https://salempl.org/",
+      "harvested": true
+    },
+    {
+      "name": "Sherwood Public Library",
+      "state": "Washington County",
+      "stems": [
+        "splprinting"
+      ],
+      "website": "http://www.sherwoodoregon.gov/library",
+      "harvested": true
+    },
+    {
+      "name": "Webster Groves Public Library",
+      "state": "St. Louis County",
+      "stems": [
+        "wgpl"
+      ],
+      "website": "http://www.wgpl.org/",
+      "harvested": true
+    },
+    {
+      "name": "Hoyt Library",
+      "stems": [
+        "butmanfish",
+        "hoyt",
+        "wickes",
+        "zauel"
+      ],
+      "website": "http://www.saginawlibrary.org/",
+      "harvested": true
+    },
+    {
+      "name": "Dewitt District Library",
+      "stems": [
+        "ddl"
+      ],
+      "website": "https://www.dewittlibrary.org/",
+      "harvested": true
+    },
+    {
+      "name": "Twin Oaks Branch Library",
+      "state": "Travis County",
+      "stems": [
+        "apl_ace",
+        "apl_acb",
+        "apl_acp",
+        "apl_aok",
+        "apl_aho",
+        "apl_agb",
+        "apl_alw",
+        "apl_amr",
+        "apl_ami",
+        "apl_aph",
+        "apl_arz",
+        "apl_asj",
+        "apl_ase",
+        "apl_asr",
+        "apl_atb",
+        "apl_ato",
+        "apl_auh",
+        "apl_awk",
+        "apl_awp",
+        "apl_ayb"
+      ],
+      "website": "https://library.austintexas.gov/twin-oaks-branch",
+      "harvested": true
+    },
+    {
+      "name": "Twin Oaks Branch Library",
+      "state": "Travis County",
+      "stems": [
+        "apl_ace",
+        "apl_acb",
+        "apl_acp",
+        "apl_aok",
+        "apl_aho",
+        "apl_anv",
+        "apl_alw",
+        "apl_amr",
+        "apl_ami",
+        "apl_aph",
+        "apl_arz",
+        "apl_asj",
+        "apl_ase",
+        "apl_asr",
+        "apl_atb",
+        "apl_ato",
+        "apl_auh",
+        "apl_awk",
+        "apl_awp",
+        "apl_ayb"
+      ],
+      "website": "https://library.austintexas.gov/es/twin-oaks-branch",
+      "harvested": true
+    },
+    {
+      "name": "Jackson County Public Library",
+      "stems": [
+        "seymour"
+      ],
+      "website": "https://www.myjclibrary.org/",
+      "harvested": true
+    },
+    {
+      "name": "Franklin Public Library",
+      "state": "Warren County",
+      "stems": [
+        "fspl_franklin",
+        "fspl_springboro"
+      ],
+      "website": "https://www.fspl.org/",
+      "harvested": true
+    },
+    {
+      "name": "Durham County Library",
+      "stems": [
+        "mainreg",
+        "mainreg-legal",
+        "eastreg",
+        "eastreg-legal",
+        "northreg",
+        "northreg-legal",
+        "southreg",
+        "southreg-legal",
+        "southwestreg",
+        "southwestreg-legal",
+        "stanfordlwarren",
+        "stanfordlwarren-legal",
+        "bragtownreg",
+        "bragtownreg-legal"
+      ],
+      "website": "https://durhamcountylibrary.org",
+      "harvested": true
+    },
+    {
+      "name": "Joshua Hyde Public Library",
+      "state": "Worcester County",
+      "stems": [
+        "sumain"
+      ],
+      "website": "https://www.sturbridgelibrary.org/",
+      "harvested": true
+    },
+    {
+      "name": "St. Paul Public Library - Central",
+      "stems": [
+        "arlingtonhills",
+        "daytonsbluff",
+        "glcl",
+        "hamline",
+        "highlandpark",
+        "merriampark",
+        "ricestreet",
+        "riverview",
+        "rondo",
+        "saintanthonypark",
+        "sunray",
+        "west7th"
+      ],
+      "website": "http://www.sppl.org",
+      "harvested": true
+    },
+    {
+      "name": "Greenwich Library",
+      "state": "Western Connecticut Planning Region",
+      "stems": [
+        "byram_bw",
+        "byram_color",
+        "coscob_bw",
+        "coscob_color",
+        "welcome_bw",
+        "welcome_color",
+        "rr_bw",
+        "rr_color",
+        "2ndflr_bw",
+        "2ndflr_color"
+      ],
+      "website": "https://www.greenwichlibrary.org/",
+      "harvested": true
     }
-  ]
+  ],
+  "harvested_at": "2026-09-04T23:35:10.857Z",
+  "crawled_at": "2026-09-04T23:52:41.001Z"
 }
