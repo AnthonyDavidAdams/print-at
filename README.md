@@ -117,6 +117,10 @@ PRINTAT_DRY_RUN=1 node ~/printat/agent/server.js
 PRINTAT_DRY_RUN=1 PRINTAT_SKIP_CLAUDE=1 node ~/printat/agent/server.js   # distance only
 ```
 
+## Printers near you (map)
+
+`http://127.0.0.1:4243/near` plots every printer around you on an OpenStreetMap: your location, PrinterOn printers, PrintMe kiosks, chains, and local shops, each colour-coded, with the address and how-to-send in a side list. Click a marker or row to focus it.
+
 ## Console
 
 **Print@ Console** in `~/Applications` (Spotlight finds it; there is also a Console button in

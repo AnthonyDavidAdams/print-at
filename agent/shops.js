@@ -6,10 +6,10 @@ const { log } = require('./config');
 
 // Brand knowledge Claude gets as hints. Portal URLs are the public upload entry points.
 const CHAINS = [
-  { match: /fedex office/i, brand: 'FedEx Office', portal: 'https://www.office.fedex.com/default/print-products', notes: 'Online upload with store pickup; kiosks also take email-to-print (Print & Go). Typical: $0.16-0.19/pg B&W, $0.79-0.99/pg color; same-day.' },
-  { match: /staples/i, brand: 'Staples', portal: 'https://www.staples.com/services/printing/', notes: 'Online upload, same-day pickup in most stores. Typical: $0.15-0.19/pg B&W, $0.59-0.79/pg color.' },
-  { match: /ups store/i, brand: 'The UPS Store', portal: 'https://www.theupsstore.com/print/online-printing', notes: 'Each store also accepts email orders at store####@theupsstore.com (number from the store page). Pricing varies by franchise.' },
-  { match: /office ?depot|officemax/i, brand: 'Office Depot / OfficeMax', portal: 'https://www.officedepot.com/l/print-and-copy/print-online', notes: 'Online upload, 1-hour pickup on simple B&W/color docs.' },
+  { match: /fedex office/i, brand: 'FedEx Office', email: 'printandgo@fedex.com', portal: 'https://www.office.fedex.com/default/print-products', notes: 'Central email-to-print: email the PDF to printandgo@fedex.com, a retrieval code comes back (good 10 days), release at any FedEx Office self-service kiosk. Typical $0.16-0.19/pg B&W, $0.79-0.99 color.' },
+  { match: /staples/i, brand: 'Staples', email: 'staples@printme.com', portal: 'https://www.staples.com/services/printing/', notes: 'Central email-to-print (PrintMe): email the PDF to staples@printme.com, an 8-digit barcode comes back, release at any Staples self-service kiosk. Typical $0.15-0.19/pg B&W, $0.59-0.79 color.' },
+  { match: /ups store/i, brand: 'The UPS Store', portal: 'https://www.theupsstore.com/print/online-printing', notes: 'Each store accepts email orders at store####@theupsstore.com; find the number on the store page (e.g. store2235@theupsstore.com). Goes to that specific store; pricing varies by franchise.' },
+  { match: /office ?depot|officemax/i, brand: 'Office Depot / OfficeMax', email: 'officedepot@printme.com', portal: 'https://www.officedepot.com/l/print-and-copy/print-online', notes: 'Central email-to-print (PrintMe): email the PDF to officedepot@printme.com, a release code comes back, release at any Office Depot/OfficeMax kiosk. 1-hour pickup on simple docs.' },
   { match: /walgreens/i, brand: 'Walgreens', portal: 'https://photo.walgreens.com/store/document-printing', notes: 'Document printing via photo site, same-day pickup, B&W and color letter size only. Some stores publish a store email; check the store page.' },
   { match: /\bcvs\b/i, brand: 'CVS', portal: 'https://www.cvs.com/photo/documents', notes: 'Document printing via photo site, same-day pickup, letter size only. Some stores publish a store email; check the store page.' },
   { match: /walmart/i, brand: 'Walmart', portal: 'https://photos.walmart.com/', notes: 'Photo center; document printing varies by store. Check the store page for a store email before ruling it out.' },
@@ -82,6 +82,7 @@ async function findCandidates(loc, shopType, maxDistance, pin = '') {
       brand: chain ? chain.brand : 'independent',
       portal: chain && chain.portal ? chain.portal : '',
       brand_notes: chain ? chain.notes : '',
+      chain_email: chain && chain.email ? chain.email : '',
     };
   });
   // PrinterOn public printers (hotel business centers, libraries) come with a known

@@ -47,7 +47,7 @@ form.inline{display:flex;gap:8px;align-items:center;margin-top:10px}
 form.settings{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}form.settings label{display:flex;flex-direction:column;font-size:12px;color:#5b6573;gap:3px}form.settings label input[type=text]{min-width:0;width:100%;box-sizing:border-box}form.settings label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:#1c2430}form.settings div{grid-column:1/-1}input[type=text]{font:13px -apple-system,system-ui;padding:4px 8px;border:1px solid #c9ced5;border-radius:6px;min-width:220px}
 </style>
 <h1>Print@<sup>™</sup> console</h1>
-<div class="muted">Agent on 127.0.0.1:${cfg.port}. Printers also appear in System Settings › Printers &amp; Scanners. · <a href="/sync">PrinterOn directory sync</a>${fs.existsSync(SYNC_OUT) ? ' · directory on disk: ' + (readJson(SYNC_OUT, {}).count || 0) + ' printers' : ''}</div>
+<div class="muted">Agent on 127.0.0.1:${cfg.port}. Printers also appear in System Settings › Printers &amp; Scanners. · <a href="/near">printers near me (map)</a> · <a href="/sync">directory sync</a>${fs.existsSync(SYNC_OUT) ? ' · directory on disk: ' + (readJson(SYNC_OUT, {}).count || 0) + ' printers' : ''}</div>
 
 <h2>Settings</h2>
 <form method="post" action="/settings" class="settings">
@@ -250,8 +250,69 @@ refresh();setInterval(refresh,1500);
 </script>`;
 }
 
+async function nearData(cfg) {
+  const { locate } = require('./locate');
+  const { findCandidates } = require('./shops');
+  let loc;
+  try { loc = await locate(cfg); } catch { loc = { lat: 39.8, lon: -98.6, address: 'location unavailable', source: 'default' }; }
+  let cands = [];
+  try { cands = await findCandidates(loc, 'Any', '25mi'); } catch (e) { log(`near: ${e.message}`); }
+  const pts = cands.filter(c => c.lat != null && c.lon != null).map(c => ({
+    name: c.name, address: c.address, lat: c.lat, lon: c.lon, distance_mi: c.distance_mi,
+    type: c.brand === 'PrinterOn' ? 'printeron' : c.brand === 'PrintMe' ? 'printme' : c.brand === 'independent' ? 'local' : 'chain',
+    how: c.printme ? ('email ' + c.printme.email) : c.printeron ? ('email ' + c.printeron.email) : c.chain_email ? ('email ' + c.chain_email) : c.portal ? 'online upload' : c.phone ? ('call ' + c.phone) : 'walk-in',
+  }));
+  return { center: { lat: loc.lat, lon: loc.lon, address: loc.address, source: loc.source }, printers: pts };
+}
+
+function nearPage() {
+  return `<!doctype html><meta charset="utf-8"><title>Print@ — printers near you</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+html,body{margin:0;height:100%;font:14px/1.4 -apple-system,system-ui,sans-serif;background:#0e1116;color:#e6e9ee}
+#map{position:absolute;top:0;left:0;right:320px;bottom:0}
+#side{position:absolute;top:0;right:0;bottom:0;width:320px;overflow:auto;background:#161b23;border-left:1px solid #242b36;padding:14px 16px;box-sizing:border-box}
+h1{font-size:16px;margin:0 0 2px}.muted{color:#8b95a5;font-size:12px}
+.row{border-top:1px solid #242b36;padding:8px 0;cursor:pointer}.row:hover{background:#1b212b}
+.row b{font-size:13px}.row .m{color:#8b95a5;font-size:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.printeron{background:#ff6b4a}.printme{background:#c98bff}.chain{background:#5ec8ff}.local{background:#5bd39a}
+.leaflet-popup-content{font:13px -apple-system,system-ui}
+</style>
+<div id="map"></div>
+<div id="side"><h1>Printers near you</h1><div class="muted" id="ctr">locating…</div><div id="list"></div>
+<div class="muted" style="margin-top:12px">Colours: <span class="dot printeron"></span>PrinterOn <span class="dot printme"></span>PrintMe <span class="dot chain"></span>chain <span class="dot local"></span>local</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const COL={printeron:'#ff6b4a',printme:'#c98bff',chain:'#5ec8ff',local:'#5bd39a'};
+(async()=>{
+ const d=await(await fetch('/near/data')).json();
+ const c=d.center;
+ const map=L.map('map').setView([c.lat,c.lon],12);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+ L.circleMarker([c.lat,c.lon],{radius:8,color:'#fff',fillColor:'#2b6cff',fillOpacity:1,weight:2}).addTo(map).bindPopup('You: '+c.address);
+ document.getElementById('ctr').textContent=c.address+' ('+c.source+') · '+d.printers.length+' printers';
+ const markers={};
+ d.printers.forEach((p,i)=>{
+  const m=L.circleMarker([p.lat,p.lon],{radius:6,color:'#0e1116',weight:1,fillColor:COL[p.type]||'#ccc',fillOpacity:.95}).addTo(map)
+   .bindPopup('<b>'+p.name+'</b><br>'+p.address+'<br>'+p.distance_mi+' mi · '+p.how);
+  markers[i]=m;
+ });
+ const bounds=L.latLngBounds([[c.lat,c.lon],...d.printers.map(p=>[p.lat,p.lon])]);
+ if(d.printers.length)map.fitBounds(bounds.pad(0.15));
+ document.getElementById('list').innerHTML=d.printers.map((p,i)=>'<div class="row" data-i="'+i+'"><b><span class="dot '+p.type+'"></span>'+p.name+'</b><div class="m">'+p.distance_mi+' mi · '+p.how+'</div><div class="m">'+p.address+'</div></div>').join('');
+ document.querySelectorAll('.row').forEach(r=>r.onclick=()=>{const i=r.dataset.i;markers[i].openPopup();map.panTo(markers[i].getLatLng())});
+})();
+</script>`;
+}
+
 function handle(req, res, cfg) {
   const url = req.url.split('?')[0];
+  if (req.method === 'GET' && url === '/near') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(nearPage()); return true; }
+  if (req.method === 'GET' && url === '/near/data') {
+    nearData(cfg).then(d => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(d)); }).catch(e => { res.writeHead(500); res.end(String(e)); });
+    return true;
+  }
   if (req.method === 'GET' && url === '/sync') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(syncPage()); return true; }
   if (req.method === 'GET' && url === '/sync/status') {
     let body = '{}';
