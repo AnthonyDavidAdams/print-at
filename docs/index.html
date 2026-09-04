@@ -87,19 +87,14 @@
   .brands:before,.brands:after{content:"";position:absolute;top:0;bottom:0;width:120px;z-index:2}
   .brands:before{left:0;background:linear-gradient(90deg,var(--bg),transparent)}
   .brands:after{right:0;background:linear-gradient(270deg,var(--bg),transparent)}
-  .track{display:flex;gap:60px;width:max-content;animation:scroll 32s linear infinite;align-items:center}
+  .track{display:flex;gap:26px;width:max-content;animation:scroll 34s linear infinite;align-items:center}
   .brands:hover .track{animation-play-state:paused}
   @keyframes scroll{to{transform:translateX(-50%)}}
-  .bmk{font-weight:700;font-size:26px;letter-spacing:-.5px;white-space:nowrap;opacity:.9;filter:saturate(1.1)}
-  .fedex .fed{color:#4d148c}.fedex .ex{color:#ff6600}
-  .staples{color:#cc0000}
-  .ups{color:#644117}.ups b{background:#ffb500;color:#644117;padding:0 6px;border-radius:3px}
-  .odepot .o{color:#e31837}.odepot .d{color:#004b8d}
-  .upsstore{color:#8a6d3b}
-  .printeron{color:#ff6b4a}
-  .printme{color:#a97bff}
-  .hilton{color:#c9a24b;letter-spacing:3px;font-weight:600}
-  .library{color:#5ec8ff}
+  .chip{display:flex;align-items:center;justify-content:center;height:66px;padding:0 26px;background:#fff;border-radius:14px;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+  .chip img{height:30px;width:auto;display:block}
+  .chip.net{background:#0f1522;border:1px solid var(--line);font-weight:700;font-size:22px;letter-spacing:-.4px}
+  .chip.net.printeron{color:#ff6b4a}.chip.net.printme{color:#a97bff}
+  .chip.cat{background:#0f1522;border:1px solid var(--line);color:var(--dim);font-weight:600;font-size:16px;letter-spacing:.3px}
 
   /* stats */
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:70px 0}
@@ -260,15 +255,15 @@
 <script>
   // brand marquee (duplicated for seamless loop)
   var brands = [
-    '<span class="bmk fedex"><span class="fed">Fed</span><span class="ex">Ex</span> Office</span>',
-    '<span class="bmk staples">STAPLES</span>',
-    '<span class="bmk ups upsstore">The UPS Store</span>',
-    '<span class="bmk odepot"><span class="o">Office</span> <span class="d">Depot</span></span>',
-    '<span class="bmk printeron">PrinterOn</span>',
-    '<span class="bmk printme">PrintMe</span>',
-    '<span class="bmk hilton">HILTON</span>',
-    '<span class="bmk library">Public Libraries</span>',
-    '<span class="bmk odepot"><span class="d">Office</span><span class="o">Max</span></span>'
+    '<span class="chip"><img src="assets/logos/fedex.svg" alt="FedEx Office"></span>',
+    '<span class="chip"><img src="assets/logos/staples.svg" alt="Staples"></span>',
+    '<span class="chip"><img src="assets/logos/ups.svg" alt="UPS"></span>',
+    '<span class="chip"><img src="assets/logos/officedepot.svg" alt="Office Depot"></span>',
+    '<span class="chip net printeron">PrinterOn</span>',
+    '<span class="chip net printme">PrintMe</span>',
+    '<span class="chip cat">Hotel business centers</span>',
+    '<span class="chip cat">Public libraries</span>',
+    '<span class="chip cat">Local copy shops</span>'
   ];
   document.getElementById('track').innerHTML = (brands.join('') + brands.join(''));
 
