@@ -1,0 +1,76 @@
+#!/usr/bin/env node
+'use strict';
+// Fill in missing color/model on data/printeron-all.json by re-reading each printer's
+// PrinterOn details page (session-bound, select-then-ask to avoid the wrong-printer bug).
+const fs = require('fs');
+const path = require('path');
+const FILE = path.join(__dirname, 'data', 'printeron-all.json');
+const BASE = 'https://www.printeron.net';
+const UA = 'Mozilla/5.0 (Macintosh) Print@ color pass';
+const CONC = 6;
+
+async function get(url, cookie = '', attempt = 1) {
+  let jar = cookie;
+  try {
+    for (let hop = 0; hop < 6; hop++) {
+      const res = await fetch(url, { headers: { 'User-Agent': UA, ...(jar ? { Cookie: jar } : {}) }, signal: AbortSignal.timeout(25000), redirect: 'manual' });
+      const sc = res.headers.get('set-cookie') || '';
+      const j = (sc.match(/JSESSIONID=([^;]+)/) || [])[1];
+      if (j) jar = `JSESSIONID=${j}`;
+      const loc = res.headers.get('location');
+      if (res.status >= 300 && res.status < 400 && loc) {
+        const nx = new URL(loc, url);
+        if (!/(^|\.)printeron\.net$/.test(nx.hostname)) throw Object.assign(new Error('offhost'), { soft: true });
+        url = nx.toString();
+        const pj = (url.match(/;jsessionid=([^?&/]+)/) || [])[1];
+        if (pj) jar = `JSESSIONID=${pj}`;
+        continue;
+      }
+      const t = await res.text();
+      return Object.assign(new String(t), { cookie: jar });
+    }
+    throw new Error('redirect loop');
+  } catch (e) {
+    if ((e.soft || /timeout|fetch failed/i.test(e.message)) && attempt <= 4) { await new Promise(r => setTimeout(r, 400 * attempt)); return get(url, cookie, attempt + 1); }
+    throw e;
+  }
+}
+const strip = s => String(s).replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+
+async function colorFor(p) {
+  const page = await get(`${BASE}/${p.path}`);
+  const sid = page.cookie ? ';jsessionid=' + page.cookie.replace('JSESSIONID=', '') : '';
+  const durl = `${BASE}/Page${sid}?FUNCTION=SearchServlet_search&printeraddress=${p.alias}&urlsearch=true&dd=true&lang=us`;
+  let d = strip(await get(durl, page.cookie));
+  let pnum = (d.match(/Printer Number:\s*([\d-]{11,15})/) || [])[1];
+  if (pnum && pnum !== p.number) {
+    await get(`${BASE}/system/printspot/interface/select_file.jsp${sid}?url=${encodeURIComponent(p.path)}&printerAlias=${p.alias}&lang=en-us`, page.cookie);
+    d = strip(await get(durl, page.cookie));
+    pnum = (d.match(/Printer Number:\s*([\d-]{11,15})/) || [])[1];
+  }
+  if (pnum && pnum !== p.number) return null; // still wrong printer; leave unknown
+  const cm = d.match(/Color\/B&W:\s*(Color|Black\s*&\s*White)/i);
+  const mm = d.match(/Model:\s*([A-Za-z0-9 .-]{2,30})/);
+  return { color: cm ? /color/i.test(cm[1]) : null, model: mm ? mm[1].trim() : (p.model || '') };
+}
+
+(async () => {
+  const data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  const todo = data.printers.filter(p => p.alias && p.color === null);
+  console.log(`${todo.length} printers need color`);
+  let done = 0, filled = 0, idx = 0, t0 = Date.now();
+  const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 1));
+  async function worker() {
+    while (idx < todo.length) {
+      const p = todo[idx++];
+      try { const r = await colorFor(p); if (r && r.color !== null) { p.color = r.color; if (r.model) p.model = r.model; filled++; } }
+      catch (e) { /* leave unknown */ }
+      done++;
+      if (done % 50 === 0) { save(); console.log(`${done}/${todo.length} checked, ${filled} filled, ${Math.round((Date.now() - t0) / 1000)}s`); }
+    }
+  }
+  await Promise.all(Array.from({ length: CONC }, worker));
+  save();
+  const yes = data.printers.filter(p => p.color === true).length, no = data.printers.filter(p => p.color === false).length, un = data.printers.filter(p => p.alias && p.color === null).length;
+  console.log(`DONE: filled ${filled}. Now color=${yes}, bw=${no}, unknown=${un}, in ${Math.round((Date.now() - t0) / 1000)}s`);
+})().catch(e => { console.error('FATAL', e); process.exit(1); });
