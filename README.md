@@ -1,6 +1,13 @@
-# Print@™
+<p align="center">
+  <img src="docs/assets/printat-badge.png" alt="Print@ — Print Anywhere. One Click." width="640">
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://anthonydavidadams.github.io/print-at/"><b>Website</b></a> ·
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-1c3a57.svg" alt="MIT"></a>
+</p>
+
+# Print@™
 
 A virtual printer for macOS. Pick **Print@ Nearby** in any Print dialog and the job goes to
 the closest print shop that fits your priorities instead of to a device on your desk. Once a
