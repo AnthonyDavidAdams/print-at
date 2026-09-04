@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Print@">
+<title>Print@ — print anywhere</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@500;600;700&family=Bitter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#efe4cc;--card:#f5ecd7;--ink:#1c3a57;--ink2:#274c6e;--red:#c8432c;--gold:#d09a3c;--line:#1c3a57}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:"Bitter",Georgia,serif;
+    background-image:radial-gradient(var(--ink) 1px,transparent 1.4px);background-size:7px 7px;background-attachment:fixed}
+  body:before{content:"";position:fixed;inset:0;background:var(--paper);opacity:.94;z-index:-1}
+  .wrap{max-width:560px;margin:0 auto;padding:20px 18px 60px}
+  header{text-align:center;padding:14px 0 6px}
+  .brand{font-family:"Anton";font-size:40px;letter-spacing:1px}.brand .at{color:var(--red)}
+  .tag{font-family:"Oswald";text-transform:uppercase;letter-spacing:2px;font-size:12px;color:var(--ink2)}
+  .card{background:var(--card);border:3px solid var(--ink);box-shadow:5px 5px 0 rgba(28,58,87,.15);padding:18px;margin:16px 0}
+  .lab{font-family:"Oswald";font-weight:700;text-transform:uppercase;letter-spacing:1.5px;font-size:13px;color:var(--red);margin-bottom:8px}
+  .btn{font-family:"Oswald";font-weight:700;text-transform:uppercase;letter-spacing:1px;font-size:16px;width:100%;
+    padding:16px;border:2.5px solid var(--ink);background:var(--ink);color:var(--paper);box-shadow:4px 4px 0 #0d2236;cursor:pointer}
+  .btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #0d2236}
+  .btn.red{background:var(--red);border-color:var(--red);box-shadow:4px 4px 0 #7d2417}
+  .btn.ghost{background:var(--card);color:var(--ink)}
+  input[type=file],input[type=text],select{width:100%;font-family:"Bitter";font-size:16px;padding:12px;border:2px solid var(--ink);background:#fff;margin-top:6px}
+  label{font-family:"Oswald";font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .shop{border:2px solid var(--ink);background:#fff;padding:12px;margin-top:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .shop.sel{background:var(--gold);border-color:var(--red)}
+  .shop .n{font-weight:600}.shop .m{font-size:13px;color:var(--ink2)}
+  .tag2{font-family:"Oswald";font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:3px;white-space:nowrap}
+  .auto{background:#1c3a57;color:#fff}.man{background:#e7d9ba;color:#1c3a57}
+  .muted{color:var(--ink2);font-size:14px}
+  .hidden{display:none}
+  .msg{padding:12px;border:2px solid var(--ink);background:#fff;margin-top:10px;font-size:14px}
+  .ok{border-color:#2e7d4f;background:#e8f5ec}
+  .spin{display:inline-block;width:16px;height:16px;border:3px solid var(--paper);border-top-color:var(--red);border-radius:50%;animation:s 1s linear infinite;vertical-align:-3px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  a{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">PRINT<span class="at">@</span></div>
+    <div class="tag">Print Anywhere &middot; One Tap</div>
+  </header>
+
+  <div class="card" id="step-file">
+    <div class="lab">1 &middot; Your document</div>
+    <label>PDF or photo to print
+      <input type="file" id="file" accept="application/pdf,image/*">
+    </label>
+    <div class="row" style="margin-top:12px">
+      <div><label>Color</label><select id="color"><option value="bw">Black &amp; White</option><option value="color">Color</option></select></div>
+      <div><label>Copies</label><input type="text" id="copies" value="1" inputmode="numeric"></div>
+    </div>
+    <label style="display:block;margin-top:12px">Your email (for the pickup code)
+      <input type="text" id="email" inputmode="email" placeholder="you@example.com">
+    </label>
+    <button class="btn" id="find" style="margin-top:14px">Find printers near me</button>
+    <div class="muted" id="locnote" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card hidden" id="step-shops">
+    <div class="lab">2 &middot; Pick a shop</div>
+    <div id="shops"></div>
+  </div>
+
+  <div class="card hidden" id="step-send">
+    <div class="lab">3 &middot; Send it</div>
+    <div class="muted" id="pick-summary"></div>
+    <button class="btn red" id="send" style="margin-top:12px">Send to printer</button>
+    <div id="result"></div>
+  </div>
+
+  <p class="muted" style="text-align:center;margin-top:24px;font-size:13px">
+    Open source &middot; <a href="https://github.com/AnthonyDavidAdams/print-at">github.com/AnthonyDavidAdams/print-at</a>
+  </p>
+</div>
+
+<script>
+var $=function(id){return document.getElementById(id)};
+var state={loc:null,shops:[],pick:null,fileB64:null,filename:null};
+
+$('file').addEventListener('change',function(e){
+  var f=e.target.files[0]; if(!f)return;
+  state.filename=f.name;
+  var r=new FileReader();
+  r.onload=function(){ state.fileB64=r.result.split(',')[1]; };
+  r.readAsDataURL(f);
+});
+
+$('find').addEventListener('click',function(){
+  if(!state.fileB64){alert('Choose a file first.');return;}
+  $('locnote').innerHTML='<span class="spin"></span> Finding your location…';
+  navigator.geolocation.getCurrentPosition(function(pos){
+    state.loc={lat:pos.coords.latitude,lon:pos.coords.longitude};
+    $('locnote').innerHTML='Searching near you…';
+    fetch('/api/nearby',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state.loc)})
+      .then(function(r){return r.json()}).then(function(d){
+        state.shops=d.shops||[];
+        $('locnote').textContent=state.shops.length+' printers found nearby';
+        renderShops();
+      }).catch(function(){ $('locnote').textContent='Search failed — try again.'; });
+  },function(err){
+    $('locnote').textContent='Location blocked. Allow location and try again.';
+  },{enableHighAccuracy:true,timeout:12000});
+});
+
+function renderShops(){
+  var el=$('shops'); el.innerHTML='';
+  state.shops.forEach(function(s,i){
+    var d=document.createElement('div'); d.className='shop';
+    var tag=s.automatable?'<span class="tag2 auto">Auto-send</span>':'<span class="tag2 man">Walk-in</span>';
+    d.innerHTML='<div><div class="n">'+esc(s.name)+'</div><div class="m">'+(s.distance_mi!=null?s.distance_mi+' mi · ':'')+esc(s.address||'')+'</div><div class="m">'+esc(s.how||'')+'</div></div>'+tag;
+    d.onclick=function(){ state.pick=s; document.querySelectorAll('.shop').forEach(function(x){x.classList.remove('sel')}); d.classList.add('sel'); showSend(); };
+    el.appendChild(d);
+  });
+  $('step-shops').classList.remove('hidden');
+}
+function showSend(){
+  var s=state.pick;
+  $('pick-summary').innerHTML='<b>'+esc(s.name)+'</b><br>'+esc(s.address||'')+'<br>'+esc(s.how||'');
+  $('send').textContent = s.automatable ? 'Send to '+s.name : 'Show details';
+  $('step-send').classList.remove('hidden');
+  $('step-send').scrollIntoView({behavior:'smooth'});
+}
+$('send').addEventListener('click',function(){
+  var s=state.pick; if(!s)return;
+  if(!s.automatable){ $('result').innerHTML='<div class="msg">This shop takes walk-ins. Bring your file to:<br><b>'+esc(s.address||s.name)+'</b></div>'; return; }
+  var email=$('email').value.trim();
+  var color=$('color').value, copies=$('copies').value||'1';
+  var msg='Print the attached document. '+copies+' cop'+(copies==='1'?'y':'ies')+', '+(color==='color'?'color':'black & white')+'.';
+  $('result').innerHTML='<div class="msg"><span class="spin"></span> Sending…</div>';
+  fetch('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    to:s.email, subject:state.filename, message:msg, filename:state.filename, fileB64:state.fileB64, cc:email
+  })}).then(function(r){return r.json()}).then(function(d){
+    if(d.sent) $('result').innerHTML='<div class="msg ok"><b>Sent to '+esc(s.name)+'.</b><br>Watch your email for a pickup code, then collect it at:<br>'+esc(s.address||'')+'</div>';
+    else $('result').innerHTML='<div class="msg">Could not send: '+esc(d.error||'error')+'</div>';
+  }).catch(function(){ $('result').innerHTML='<div class="msg">Send failed — try again.</div>'; });
+});
+function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+</script>
+</body>
+</html>
