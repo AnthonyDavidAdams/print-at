@@ -164,8 +164,9 @@ and are offered directly only when nothing automatable exists nearby.
   instantly with no lookup during a job. Before offering one it re-checks that printer live
   (about 150 ms) so a dead one is never shown. The PDF is emailed to the printer, PrinterOn
   mails you a 6-digit release code, and you collect it at the desk; libraries charge a few
-  cents a page at the release station, hotels are often free for guests. Refresh with
-  `node printat-printeron-sync ALL` (or `US`), watched on the WOPR board at
+  cents a page at the release station, hotels are often free for guests. The directory
+  ships bundled and cached — your Mac never scans anything. Maintainers refresh it with
+  `node printat-printeron-sync ALL` (or `US`), watched on a WOPR-style board at
   `http://127.0.0.1:4243/sync`.
 - **PrintMe**: the other public-printing network (EFI/Fiery), powering Office Depot, Staples
   kiosks, libraries and campuses. Print@ ships its directory (`data/printme-us.json`, ~1,980
