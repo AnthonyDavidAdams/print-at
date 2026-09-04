@@ -91,9 +91,10 @@
   .brands:hover .track{animation-play-state:paused}
   @keyframes scroll{to{transform:translateX(-50%)}}
   .lg{display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-  .lg img{width:auto;display:block;filter:brightness(0) invert(1);opacity:.62;transition:.35s}
-  .lg:hover img{filter:none;opacity:1}
-  .lg img{height:30px}
+  .lg img{width:auto;display:block;height:30px;opacity:.96;transition:.35s;
+    filter:drop-shadow(0 0 1.2px #fff) drop-shadow(0 0 2px rgba(255,255,255,.9)) drop-shadow(0 0 10px rgba(255,255,255,.35))}
+  .lg:hover img{opacity:1;transform:scale(1.05);
+    filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 3px rgba(255,255,255,1)) drop-shadow(0 0 16px rgba(120,200,255,.6))}
   .lg.big img{height:46px}
   .lg.mid img{height:38px}
   .net{font-weight:700;font-size:24px;letter-spacing:-.5px;color:#c3ccdb;transition:.35s;flex:0 0 auto}
