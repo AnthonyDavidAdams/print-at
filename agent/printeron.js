@@ -9,7 +9,8 @@ const { APP_DIR, log } = require('./config');
 const { geocode } = require('./locate');
 
 const CACHE = path.join(APP_DIR, 'printeron.json');
-const DIRECTORY = path.join(__dirname, '..', 'data', 'printeron-us.json');
+const DIR_ALL = path.join(__dirname, '..', 'data', 'printeron-all.json');
+const DIR_US = path.join(__dirname, '..', 'data', 'printeron-us.json');
 const BASE = 'https://www.printeron.net';
 const UA = 'Mozilla/5.0 (Macintosh) Print@';
 const TTL = 7 * 86400e3;
@@ -105,7 +106,10 @@ function miles(a, b) {
 let DIR = null;
 function loadDirectory() {
   if (DIR !== null) return DIR;
-  try { DIR = JSON.parse(fs.readFileSync(DIRECTORY, 'utf8')).printers || []; } catch { DIR = []; }
+  for (const f of [DIR_ALL, DIR_US]) {
+    try { const all = JSON.parse(fs.readFileSync(f, 'utf8')).printers || []; DIR = all.filter(p => p.alias); return DIR; } catch {}
+  }
+  DIR = [];
   return DIR;
 }
 
@@ -184,6 +188,16 @@ async function findNearby(loc, otherAddresses = [], radiusMi = 10) {
 }
 
 // Shape a PrinterOn location like a search candidate.
+// Re-fetch one location page and confirm it still serves the live upload form (alias present,
+// not "Currently Off-Line"). Returns true/false; null on a network error (treat as unknown).
+async function isLive(p) {
+  try {
+    const html = String(await get(`${BASE}/${p.path}`));
+    if (/Currently Off-?Line|Service offline/i.test(html)) return false;
+    return /name="printerAlias"[^>]*value="\d{12}"/.test(html);
+  } catch { return null; }
+}
+
 function asCandidate(p, i) {
   return {
     id: `p${i + 1}`,
@@ -199,4 +213,4 @@ function asCandidate(p, i) {
   };
 }
 
-module.exports = { findNearby, asCandidate, cityState };
+module.exports = { findNearby, asCandidate, cityState, isLive };

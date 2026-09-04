@@ -8,7 +8,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const COUNTRY = (process.argv[2] && !process.argv[2].startsWith('--')) ? process.argv[2] : 'US';
+const ARG = (process.argv[2] && !process.argv[2].startsWith('--')) ? process.argv[2] : 'US';
+const ALL = process.argv.includes('--all') || process.argv.includes('--world') || ARG.toUpperCase() === 'ALL';
+const COUNTRY = ALL ? 'ALL' : ARG;
 const MAX = Number((process.argv.find(a => a.startsWith('--max')) || '--max=10').split('=')[1] || 10);
 const FRESH = process.argv.includes('--fresh');
 const ROOT = __dirname;
@@ -20,16 +22,17 @@ const COUNTRY_NAMES = { US: 'United States', CA: 'Canada', GB: 'United Kingdom',
 
 const STATUS = path.join(ROOT, 'data', `.printeron-${COUNTRY.toLowerCase()}.status.json`);
 const stats = { req: 0, ok: 0, fail: 0, backoffs: 0, started: Date.now() };
-const recent = []; const history = []; let lastReq = 0, lastTick = Date.now();
-let totals = { states: 0, cities: 0, citiesDone: 0, printers: 0, byState: {}, phase: 'starting', done: false };
+const recent = []; const history = []; const feed = []; let lastReq = 0, lastTick = Date.now();
+function dial(it) { feed.push({ number: it.number || ('---' + (it.path||'').slice(0,9)), name: it.name, city: it.city, state: it.state, country: it.country, status: it.alias ? 'online' : (it.status || 'no-printer'), color: it.color }); if (feed.length > 80) feed.shift(); }
+let totals = { scope: COUNTRY, countries: 0, states: 0, cities: 0, citiesDone: 0, printers: 0, byState: {}, byCountry: {}, phase: 'starting', done: false };
 function tick() {
   const now = Date.now(); const dt = (now - lastTick) / 1000 || 1;
-  history.push({ t: now, rps: Math.round((stats.req - lastReq) / dt * 10) / 10, c: concurrency }); if (history.length > 180) history.shift();
+  history.push({ t: now, rps: Math.round((stats.req - lastReq) / dt * 10) / 10, c: concurrency, cd: totals.citiesDone }); if (history.length > 180) history.shift();
   lastReq = stats.req; lastTick = now;
-  try { fs.writeFileSync(STATUS, JSON.stringify({ ...totals, stats, concurrency, paused: Date.now() < pausedUntil, history, recent: recent.slice(-40), elapsed: Math.round((now - stats.started) / 1000), at: now })); } catch {}
+  try { fs.writeFileSync(STATUS, JSON.stringify({ ...totals, stats, concurrency, paused: Date.now() < pausedUntil, history, recent: recent.slice(-40), feed: feed.slice(-60), elapsed: Math.round((now - stats.started) / 1000), at: now })); } catch {}
 }
 setInterval(tick, 2000).unref();
-let concurrency = Math.min(8, MAX), failStreak = 0, okStreak = 0, pausedUntil = 0;
+let concurrency = Math.min(4, MAX), failStreak = 0, okStreak = 0, pausedUntil = 0;
 const log = m => { const line = `${new Date().toISOString()} ${m}`; console.log(line); recent.push(line); if (recent.length > 200) recent.shift(); };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -57,7 +60,7 @@ function onFail(what) {
 }
 function onOk() {
   stats.ok++; okStreak++; failStreak = 0;
-  if (okStreak % 150 === 0 && concurrency < MAX) { concurrency++; log(`ramp: concurrency -> ${concurrency}`); }
+  if (okStreak % 400 === 0 && concurrency < MAX) { concurrency++; log(`ramp: concurrency -> ${concurrency}`); }
 }
 
 async function get(url, cookie = '', attempt = 1) {
@@ -75,7 +78,9 @@ async function get(url, cookie = '', attempt = 1) {
       const jsid = (sc.match(/JSESSIONID=([^;]+)/) || [])[1];
       if (jsid) jar = `JSESSIONID=${jsid}`;
       if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-        url = new URL(res.headers.get('location'), url).toString();
+        const next = new URL(res.headers.get('location'), url);
+        if (!/(^|\.)printeron\.net$/.test(next.hostname)) throw Object.assign(new Error(`offhost redirect ${next.hostname}`), { soft: true });
+        url = next.toString();
         const pj = (url.match(/;jsessionid=([^?&/]+)/) || [])[1];
         if (pj) jar = `JSESSIONID=${pj}`;
         continue;
@@ -88,6 +93,7 @@ async function get(url, cookie = '', attempt = 1) {
     }
     throw new Error('redirect loop');
   } catch (e) {
+    if (e.soft && attempt <= 6) { done(); await sleep(300 + attempt * 400); return get(url, cookie, attempt + 1); }
     if (e.retry && attempt <= 5) { onFail(`${e.message} on ${url.slice(0, 90)} (attempt ${attempt})`); done(); await sleep(500); return get(url, cookie, attempt + 1); }
     throw e;
   } finally { done(); }
@@ -95,15 +101,31 @@ async function get(url, cookie = '', attempt = 1) {
 
 // --- parsing -------------------------------------------------------------------
 function links(html, re) { return [...String(html).matchAll(re)].map(m => decodeURIComponent(m[1]).replace(/\+/g, ' ')); }
-async function states() {
-  const html = await get(`${BASE}/system/hotspot_search_frame.jsp?country=${encodeURIComponent(COUNTRY_NAMES[COUNTRY] || COUNTRY)}`);
-  const hrefs = [...String(html).matchAll(/href="\/system\/hotspot_search_frame\.jsp\?country=([^&"]+)&state=([^"]+)"/g)].map(m => ({ cc: m[1], state: m[2].replace(/&amp;/g, '&') }));
-  return hrefs;
+async function countries() {
+  const html = String(await get(`${BASE}/system/hotspot_search_frame.jsp`));
+  return [...new Set([...html.matchAll(/country=([^&"]+)"/g)].map(m => m[1].replace(/&amp;/g, '&')))];
 }
-async function cities(cc, state) {
-  const html = await get(`${BASE}/system/hotspot_search_frame.jsp?country=${encodeURIComponent(cc)}&state=${encodeURIComponent(state)}`);
-  return [...String(html).matchAll(/href="\/system\/hotspot_search_frame\.jsp\?country=([^&"]+)&state=([^&"]+)&city=([^"]+)"/g)].map(m => ({ cc: m[1], st: m[2].replace(/&amp;/g, '&'), city: m[3].replace(/&amp;/g, '&') }));
+
+// City links look like ?country=CC&state=ST&city=CITY. Some countries list them on the
+// country page (no state tier); others need a hop through each state page. Return {cc,st,city}.
+function cityLinks(html) {
+  return [...String(html).matchAll(/country=([^&"]+)&state=([^&"]+)&city=([^"]+)"/g)]
+    .map(m => ({ cc: m[1], st: m[2].replace(/&amp;/g, '&'), city: m[3].replace(/&amp;/g, '&') }));
 }
+function stateLinks(html) {
+  return [...String(html).matchAll(/href="\/system\/hotspot_search_frame\.jsp\?country=([^&"]+)&state=([^"]+)"/g)]
+    .map(m => ({ cc: m[1], st: m[2].replace(/&amp;/g, '&') }));
+}
+async function citiesForCountry(countryName) {
+  const html = String(await get(`${BASE}/system/hotspot_search_frame.jsp?country=${encodeURIComponent(countryName)}`));
+  const direct = cityLinks(html);
+  if (direct.length) return direct;
+  const sts = stateLinks(html);
+  const out = [];
+  await Promise.all(sts.map(async st => { try { out.push(...cityLinks(String(await get(`${BASE}/system/hotspot_search_frame.jsp?country=${encodeURIComponent(st.cc)}&state=${encodeURIComponent(st.st)}`)))); } catch (e) { log(`state ${st.st} failed: ${e.message}`); } }));
+  return out;
+}
+
 async function locations(cc, st, city) {
   const html = String(await get(`${BASE}/system/hotspot_search_frame.jsp?country=${encodeURIComponent(cc)}&state=${encodeURIComponent(st)}&city=${encodeURIComponent(city)}`));
   const out = [];
@@ -115,13 +137,22 @@ async function locations(cc, st, city) {
   return out;
 }
 function field(d, label) { const m = d.match(new RegExp(label.replace(/[/&]/g, '\\$&') + ':\\s*([^:]{1,80}?)(?=\\s{2,}|\\s[A-Z][A-Za-z/&\\s]{2,25}:|$)')); return m ? m[1].trim() : ''; }
-async function printer(loc) {
-  const page = await get(`${BASE}/${loc.path}`);
+async function fetchOnce(path) {
+  const page = await get(`${BASE}/${path}`);
   const html = String(page);
-  const aliases = [...html.matchAll(/name="printerAlias"[^>]*value="(\d{12})"/g)].map(x => x[1]);
-  if (!aliases.length) return { ...loc, printers: 0 };
+  return { page, html, offline: /Currently Off-?Line|Service offline|display_service_offline/i.test(html), aliases: [...html.matchAll(/name="printerAlias"[^>]*value="(\d{12})"/g)].map(x => x[1]) };
+}
+async function printer(loc) {
+  let r = await fetchOnce(loc.path);
+  // An "offline" result can be genuine or load-shed; confirm with one delayed retry.
+  if (!r.aliases.length) {
+    await sleep(800 + Math.random() * 700);
+    try { const r2 = await fetchOnce(loc.path); if (r2.aliases.length) r = r2; else if (!r.offline) r = r2; } catch {}
+  }
+  const { page, html, offline, aliases } = r;
+  if (!aliases.length) return { ...loc, printers: 0, status: offline ? 'offline' : 'no-printer', checked: new Date().toISOString() };
   const alias = aliases[0];
-  const out = { ...loc, alias, number: alias.replace(/^(\d{3})(\d{3})(\d{3})(\d{3})$/, '$1-$2-$3-$4'), email: `${alias.slice(3)}@printspots.com`, printers: aliases.length, color: null, model: '', cost: '' };
+  const out = { ...loc, alias, number: alias.replace(/^(\d{3})(\d{3})(\d{3})(\d{3})$/, '$1-$2-$3-$4'), email: `${alias.slice(3)}@printspots.com`, printers: aliases.length, status: 'online', checked: new Date().toISOString(), color: null, model: '', cost: '' };
   try {
     const sid = page.cookie ? ';jsessionid=' + page.cookie.replace('JSESSIONID=', '') : '';
     const detailsUrl = `${BASE}/Page${sid}?FUNCTION=SearchServlet_search&printeraddress=${alias}&urlsearch=true&dd=true&lang=us`;
@@ -159,35 +190,53 @@ const TEST = (process.argv.find(a => a.startsWith('--city=')) || '').slice(7);
   const save = () => { fs.writeFileSync(PROGRESS, JSON.stringify(progress)); };
   log(`PrinterOn sync ${COUNTRY}: start (max concurrency ${MAX}, ${Object.keys(progress.done).length} cities already done)`);
   totals.phase = 'listing states';
-  const sts = await states();
-  totals.states = sts.length; totals.phase = 'listing cities';
-  log(`${sts.length} states/regions`);
+  const targetNames = ALL ? await countries() : [COUNTRY_NAMES[COUNTRY] || COUNTRY];
+  totals.phase = 'listing cities';
+  if (ALL) log(`${targetNames.length} countries`);
   const cityList = [];
-  await Promise.all(sts.map(async s => { try { cityList.push(...await cities(s.cc, s.state)); } catch (e) { log(`state ${s.state} failed: ${e.message}`); } }));
+  for (const cn of targetNames) {
+    try { const cs = await citiesForCountry(cn); cityList.push(...cs); if (ALL) log(`${cn}: ${cs.length} cities`); }
+    catch (e) { log(`country ${cn} failed: ${e.message}`); }
+  }
+  totals.states = new Set(cityList.map(c => c.cc)).size;
   totals.cities = cityList.length; totals.citiesDone = Object.keys(progress.done).length; totals.phase = 'scanning cities';
-  for (const c of cityList) totals.byState[c.st] = totals.byState[c.st] || { cities: 0, done: 0, printers: 0 }, totals.byState[c.st].cities++;
+  for (const c of cityList) {
+    totals.byState[c.st] = totals.byState[c.st] || { cities: 0, done: 0, printers: 0 }; totals.byState[c.st].cities++;
+    totals.byCountry[c.cc] = totals.byCountry[c.cc] || { cities: 0, done: 0, printers: 0 }; totals.byCountry[c.cc].cities++;
+  }
+  totals.countries = Object.keys(totals.byCountry).length;
   for (const k of Object.keys(progress.done)) { const st = k.split('/')[0]; if (totals.byState[st]) { totals.byState[st].done++; totals.byState[st].printers += progress.done[k]; } }
   totals.printers = progress.items.filter(i => i.alias).length;
   log(`${cityList.length} cities`);
-  let n = 0, lastSave = Date.now();
-  await Promise.all(cityList.map(async c => {
-    const key = `${c.st}/${c.city}`;
-    if (progress.done[key]) return;
-    try {
-      const locs = await locations(c.cc, c.st, c.city);
-      const items = await Promise.all(locs.map(l => printer(l).catch(e => ({ ...l, error: e.message }))));
-      progress.items.push(...items);
-      progress.done[key] = items.length;
-      totals.citiesDone++; totals.printers += items.filter(i => i.alias).length;
-      if (totals.byState[c.st]) { totals.byState[c.st].done++; totals.byState[c.st].printers += items.filter(i => i.alias).length; }
-    } catch (e) { log(`city ${key} failed: ${e.message}`); return; }
-    n++;
-    if (n % 50 === 0 || Date.now() - lastSave > 30000) {
-      save(); lastSave = Date.now();
-      const el = (Date.now() - stats.started) / 1000;
-      log(`${Object.keys(progress.done).length}/${cityList.length} cities, ${progress.items.length} printers, ${stats.req} requests, ${(stats.req / el).toFixed(1)} req/s, concurrency ${concurrency}, backoffs ${stats.backoffs}`);
+  const todo = cityList.filter(c => !progress.done[`${c.st}/${c.city}`]);
+  let n = 0, lastSave = Date.now(), idx = 0;
+  // Bounded city workers: each fully finishes one city (listing + all its printers)
+  // before taking the next, so cities complete steadily instead of all at once.
+  const CITY_WORKERS = Math.max(2, Math.min(MAX, concurrency));
+  async function worker() {
+    while (idx < todo.length) {
+      const c = todo[idx++];
+      const key = `${c.st}/${c.city}`;
+      try {
+        const locs = await locations(c.cc, c.st, c.city);
+        const items = [];
+        for (const l of locs) { const it = await printer(l).catch(e => ({ ...l, error: e.message })); items.push(it); dial(it); }
+        progress.items.push(...items);
+        progress.done[key] = items.length;
+        const onc = items.filter(i => i.alias).length;
+        totals.citiesDone++; totals.printers += onc;
+        if (totals.byState[c.st]) { totals.byState[c.st].done++; totals.byState[c.st].printers += onc; }
+        if (totals.byCountry[c.cc]) { totals.byCountry[c.cc].done++; totals.byCountry[c.cc].printers += onc; }
+      } catch (e) { log(`city ${key} failed: ${e.message}`); }
+      n++;
+      if (n % 25 === 0 || Date.now() - lastSave > 20000) {
+        save(); lastSave = Date.now();
+        const el = (Date.now() - stats.started) / 1000;
+        log(`${Object.keys(progress.done).length}/${cityList.length} cities, ${totals.printers} online, ${stats.req} req, ${(stats.req / el).toFixed(1)}/s, conc ${concurrency}, backoffs ${stats.backoffs}`);
+      }
     }
-  }));
+  }
+  await Promise.all(Array.from({ length: CITY_WORKERS }, worker));
   save();
   const items = progress.items.filter(i => i.alias).map(i => { const { details_error, ...rest } = i; return rest; });
   const byKey = new Map(); for (const i of items) byKey.set(`${i.alias}`, i);

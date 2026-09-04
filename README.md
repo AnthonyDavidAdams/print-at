@@ -147,11 +147,15 @@ and are offered directly only when nothing automatable exists nearby.
   Store's per-store `store####@theupsstore.com` pattern and PrinterOn email-to-print
   addresses count.
 - **PrinterOn**: hotel business centers, libraries and airport lounges on HP's PrinterOn
-  network each have an email-to-print address. Print@ ships the whole US PrinterOn directory
-  (`data/printeron-us.json`, ~2,900 printers with email and colour), so nearby ones appear
-  instantly with no lookup during a job. The PDF is emailed to the printer, PrinterOn mails
-  you a 6-digit release code, and you collect it at the desk. Refresh the directory with
-  `node printat-printeron-sync US` and watch it at `http://127.0.0.1:4243/sync`.
+  network each have an email-to-print address. Print@ ships the whole PrinterOn public
+  directory (`data/printeron-all.json`: 3,519 venues in 53 countries, 3,212 online with
+  email and colour, plus the offline ones for later refresh), so nearby printers appear
+  instantly with no lookup during a job. Before offering one it re-checks that printer live
+  (about 150 ms) so a dead one is never shown. The PDF is emailed to the printer, PrinterOn
+  mails you a 6-digit release code, and you collect it at the desk; libraries charge a few
+  cents a page at the release station, hotels are often free for guests. Refresh with
+  `node printat-printeron-sync ALL` (or `US`), watched on the WOPR board at
+  `http://127.0.0.1:4243/sync`.
 - **Your own emails**: know a store's order address the agent could not find (a local CVS,
   Walmart or Walgreens photo counter, say)? Enter it in the console next to that shop, or
   pass it when creating a pinned printer (`printat-add "CVS" Nearest Confirm Eureka
