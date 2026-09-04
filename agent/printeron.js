@@ -118,22 +118,19 @@ async function fromDirectory(loc, radiusMi) {
   if (!dir.length) return null;
   const home = cityState(loc.address);
   const withGeo = [];
-  const needGeo = [];
+  // Entries carry ZIP-centroid coords (maintainer geocode pass) — distance-filter directly.
   for (const p of dir) {
-    const cs = cityState(', ' + p.address) || cityState(p.address + ',');
-    // fast path: same city or state, geocode lazily
-    if (home && p.state !== home.state) continue;
-    needGeo.push(p);
+    if (p.lat == null) continue;
+    if (home && p.state && p.state !== home.state) continue;
+    const mi = Math.round(miles(loc, { lat: p.lat, lon: p.lon }) * 10) / 10;
+    if (mi <= radiusMi) withGeo.push({ ...p, distance_mi: mi });
   }
-  // Geocode only the same-state printers whose city matches the user's or a candidate city set is unknown here,
-  // so bound the work: same city first, then nearest by string, cap the geocoding.
-  const sameCity = home ? needGeo.filter(p => (p.city || '').toLowerCase() === home.city.toLowerCase()) : [];
-  const pool = (sameCity.length ? sameCity : needGeo).slice(0, 40);
-  for (const p of pool) {
-    let lat = p.lat, lon = p.lon;
-    if (lat == null) { try { const g = await geocode(p.address); lat = g.lat; lon = g.lon; } catch { continue; } }
-    const mi = Math.round(miles(loc, { lat, lon }) * 10) / 10;
-    if (mi <= radiusMi) withGeo.push({ ...p, lat, lon, distance_mi: mi });
+  // For entries without coords, geocode only those in the user's own city (bounded), when known.
+  if (home) {
+    const local = dir.filter(p => p.lat == null && p.state === home.state && (p.city || '').toLowerCase() === home.city.toLowerCase()).slice(0, 12);
+    for (const p of local) {
+      try { const g = await geocode(p.address); const mi = Math.round(miles(loc, g) * 10) / 10; if (mi <= radiusMi) withGeo.push({ ...p, lat: g.lat, lon: g.lon, distance_mi: mi }); } catch {}
+    }
   }
   return withGeo.sort((a, b) => a.distance_mi - b.distance_mi);
 }
