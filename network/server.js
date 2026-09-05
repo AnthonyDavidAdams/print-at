@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db');
 const mail = require('./mail');
+const qr = require('./qr');
 
 const PORT = process.env.PORT || 4260;
 const BASE = process.env.PRINTAT_NET_BASE || `http://localhost:${PORT}`;
@@ -44,7 +45,7 @@ a{color:var(--red)}.muted{color:var(--ink2);font-size:14px}.stars{color:var(--go
 </style><link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@600;700&family=Bitter:wght@400;600&display=swap" rel="stylesheet">`;
 const page = (title, inner) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${title}</title>${CSS}<div class=wrap>${inner}</div>`;
 
-function customerPage() {
+function customerPage(preShop) {
   return page('Print@ Network', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/shop">For shops »</a></span></div>
   <p class=tag>Send a file to a nearby shop. Pick it up with a code.</p>
   <div class=card><div class=lab>1 · Documents</div>
@@ -59,14 +60,14 @@ function customerPage() {
   var items=[],pick=null;
   function render(){var box=document.getElementById('items');box.innerHTML=items.map((it,i)=>
     '<div class=job style="display:flex;gap:10px;align-items:center;margin-top:10px">'+
-    (it.thumb?'<img src="'+it.thumb+'" style="width:46px;height:60px;object-fit:cover;border:1px solid #1c3a57">':'<div style="width:46px;height:60px;border:1px solid #1c3a57;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:11px">PDF</div>')+
+    (it.thumb?'<img src="'+it.thumb+'" data-i='+i+' class=ith style="width:46px;height:60px;object-fit:cover;border:1px solid #1c3a57;transition:filter .6s ease;filter:'+(it.color==='color'?'none':'grayscale(1)')+'">':'<div style="width:46px;height:60px;border:1px solid #1c3a57;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:11px">PDF</div>')+
     '<div style=flex:1;min-width:0><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b>'+it.name+'</b></div>'+
     '<div class=row style=margin-top:4px>'+
     '<select data-i='+i+' class=ic style="padding:6px"><option value=bw>B&W</option><option value=color '+(it.color=='color'?'selected':'')+'>Color</option></select>'+
     '<input data-i='+i+' class=iq value='+it.copies+' inputmode=numeric style="padding:6px" title=copies>'+
     '<button data-i='+i+' class=irm style="width:auto;padding:6px 10px;background:#c8432c;border:2px solid #c8432c;color:#fff;font-family:Oswald;cursor:pointer">✕</button>'+
     '</div></div></div>').join('');
-    box.querySelectorAll('.ic').forEach(el=>el.onchange=e=>items[e.target.dataset.i].color=e.target.value);
+    box.querySelectorAll('.ic').forEach(el=>el.onchange=e=>{items[e.target.dataset.i].color=e.target.value;var th=box.querySelector('.ith[data-i="'+e.target.dataset.i+'"]');if(th)th.style.filter=e.target.value==='color'?'none':'grayscale(1)'});
     box.querySelectorAll('.iq').forEach(el=>el.onchange=e=>items[e.target.dataset.i].copies=Math.max(1,parseInt(e.target.value)||1));
     box.querySelectorAll('.irm').forEach(el=>el.onclick=e=>{items.splice(e.target.dataset.i,1);render()});
   }
@@ -83,18 +84,22 @@ function customerPage() {
         shops.style.display='block';
         document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+pick.name+'</b><br>'+pick.address;send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
       })},()=>note.textContent='Allow location and retry',{enableHighAccuracy:true,timeout:12000})};
+  var PRE=%PRESHOP%;
+  if(PRE){pick=PRE;document.getElementById('note').textContent='Sending to '+PRE.name;shops.style.display='none';
+    var pk=document.getElementById('pick');if(pk)pk.innerHTML='<b>'+PRE.name+'</b><br>'+(PRE.address||'');send.style.display='block';
+    find.textContent='Choose files, then send'; find.onclick=()=>{if(!items.length)return alert('Add a file');send.scrollIntoView({behavior:'smooth'})};}
   go.onclick=()=>{if(!pick)return;result.innerHTML='Sending…';
     fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,name:cname.value,email:cemail.value,items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
       if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent '+d.count+' file'+(d.count>1?'s':'')+' to '+pick.name+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
       else result.innerHTML='Error: '+(d.error||'failed')})};
-  </script>`);
+  </script>`.replace('%PRESHOP%', preShop ? JSON.stringify({id:preShop.id,name:preShop.name,address:preShop.address}) : 'null'));
 }
 
 const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   const q = Object.fromEntries(new URL(req.url, BASE).searchParams);
   try {
-    if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(customerPage()); }
+    if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(customerPage(q.shop ? db.shopById(Number(q.shop)) : null)); }
     if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true });
 
     // customer: shops nearby
@@ -125,11 +130,54 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { pickup_code: job.pickup_code, count: saved.length });
     }
 
+    // QR image for any URL: /qr?d=<url>
+    if (req.method === 'GET' && url === '/qr') {
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+      return res.end(qr.svg(q.d || BASE, { dark: q.dark || '#1c3a57' }));
+    }
+
+    // GUEST JOIN — scan a QR, unlock a shop account instantly, then finish signup.
+    if (req.method === 'GET' && url === '/join') {
+      return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Become a Print@ shop', `
+        <div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag>Guest signup</span></div>
+        <h2>Turn your shop printer into profit</h2>
+        <p class=muted>Customers and sales from a machine you already own. People nearby send print jobs, you print them from this page (no software, no kiosk), they come in to pick up. You keep the fee and the foot traffic.</p>
+        <p class=muted>Join the <b>largest network of public printers in the world</b> — free, and set up in under a minute.</p>
+        <form method=post action=/join class=card>
+          <div class=lab>Your shop</div>
+          <label>Shop name<input name=name required placeholder="e.g. Kinetic Coffee"></label>
+          <label>Email<input name=email required inputmode=email placeholder="you@shop.com"></label>
+          <label>Street address<input name=address required></label>
+          <div class=row><div><label>City<input name=city></label></div><div><label>State<input name=state></label></div></div>
+          <input type=hidden name=lat id=lat><input type=hidden name=lon id=lon>
+          <label>Hours<input name=hours placeholder="Mon-Sat 8am-6pm"></label>
+          <div class=row><div><label>B&W $/page<input name=price_bw placeholder="$0.15"></label></div><div><label>Color $/page<input name=price_color placeholder="$0.75"></label></div></div>
+          <button class=btn red>Create my shop</button>
+          <p class=muted style=margin-top:8px id=geo>Getting your location…</p>
+        </form>
+        <script>navigator.geolocation && navigator.geolocation.getCurrentPosition(p=>{lat.value=p.coords.latitude.toFixed(5);lon.value=p.coords.longitude.toFixed(5);document.getElementById('geo').textContent='Location set ✓ (edit address above if needed)'},()=>document.getElementById('geo').textContent='Enter your address; we could not auto-locate.',{enableHighAccuracy:true,timeout:8000});</script>`));
+    }
+    if (req.method === 'POST' && url === '/join') {
+      const f = await form(req);
+      let shop = db.shopByEmail(f.email);
+      if (!shop) {
+        const id = db.createShop({ name: f.name, email: f.email, address: f.address, city: f.city, state: f.state, lat: f.lat ? Number(f.lat) : null, lon: f.lon ? Number(f.lon) : null, hours: f.hours, price_bw: f.price_bw, price_color: f.price_color, color: 1, notes: '' });
+        shop = db.shopById(id);
+      }
+      // Guest unlock: give an immediate session so they can explore + print, and email a verify link to go live to customers.
+      const sTok = db.makeSession(shop.id);
+      const vTok = db.makeToken(f.email, 'verify');
+      mail(f.email, 'Verify your Print@ shop to go live', `Welcome, ${f.name}! Your shop is set up.\n\nVerify your email so customers can find you:\n${BASE}/shop/auth?token=${vTok}\n\nYou can already open your queue: ${BASE}/shop/dashboard`);
+      res.writeHead(303, { 'Set-Cookie': `pn=${sTok}; HttpOnly; SameSite=Lax; Max-Age=${30 * 864e2}; Path=/`, Location: '/shop/dashboard' });
+      return res.end();
+    }
+
     // shop: landing (signup + login)
     if (req.method === 'GET' && url === '/shop') return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Print@ for Shops', `
       <div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/">« For customers</a></span></div>
-      <h2>Offer printing. Get foot traffic.</h2>
-      <p class=muted>List your shop, and people nearby send you print jobs. You print them from this page on any device — no software, just your browser and your printer. Take a small fee at the counter.</p>
+      <h2>Turn your printer into profit.</h2>
+      <p class=muted>Your printer is already sitting there. Put it to work: people nearby send you jobs, you print them from this page (no software), and they walk in to pick up — new customers and a little revenue on every page. Set your own prices.</p>
+      <p class=muted>You're joining the <b>largest network of public printers in the world</b> — Print@ already routes to chains, hotels, libraries and 5,000+ kiosks. Independent shops are the last gap on the map, and there's no one covering your block but you.</p>
       <div class=card><div class=lab>Log in</div><form method=post action=/shop/login><label>Shop email<input name=email required></label><button class=btn>Email me a login link</button></form></div>
       <div class=card><div class=lab>New shop — sign up</div><form method=post action=/shop/signup>
         <label>Shop name<input name=name required></label>
@@ -167,9 +215,43 @@ const server = http.createServer(async (req, res) => {
 
     // shop dashboard (auth required)
     const sess = db.session(cookies(req).pn);
-    if (url.startsWith('/shop/dashboard') || url.startsWith('/shop/job') || url.startsWith('/shop/file')) {
+    if (url.startsWith('/shop/dashboard') || url.startsWith('/shop/job') || url.startsWith('/shop/group') || url.startsWith('/shop/file') || url === '/shop/qr' || url === '/shop/sign') {
       if (!sess) return redirect(res, '/shop');
       const shop = db.shopById(sess.shop_id);
+      if (req.method === 'GET' && url === '/shop/qr') {
+        const target = `${BASE}/?shop=${shop.id}`;
+        res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+        return res.end(qr.svg(target, { dark: '#1c3a57' }));
+      }
+      if (req.method === 'GET' && url === '/shop/sign') {
+        const target = `${BASE}/?shop=${shop.id}`;
+        const qrsvg = qr.svg(target, { dark: '#1c3a57' });
+        return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(`<!doctype html><meta charset=utf-8><title>${esc(shop.name)} — Print@ sign</title>
+        <style>@page{size:letter;margin:0}body{margin:0;font-family:"Bitter",Georgia,serif;color:#1c3a57}
+        .sheet{width:8.5in;height:11in;padding:0.8in 0.7in;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;text-align:center;
+          background:#efe4cc;background-image:radial-gradient(#1c3a57 1px,transparent 1.4px);background-size:9px 9px}
+        .sheet:before{content:"";position:fixed;inset:0;background:#efe4cc;opacity:.9;z-index:-1}
+        .brand{font-family:"Anton",sans-serif;font-size:64px;letter-spacing:2px}.brand .at{color:#c8432c}
+        h1{font-family:"Anton";font-size:78px;line-height:.95;margin:18px 0 6px;text-transform:uppercase}
+        .sub{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:3px;font-size:22px;color:#274c6e}
+        .qrbox{border:5px solid #1c3a57;padding:22px;margin:34px 0 18px;background:#f5ecd7;box-shadow:10px 10px 0 rgba(28,58,87,.18)}
+        .qrbox svg{width:3in;height:3in;display:block}
+        .steps{font-family:"Oswald";text-transform:uppercase;letter-spacing:1px;font-size:20px;color:#1c3a57;line-height:2}
+        .name{font-family:"Anton";font-size:30px;margin-top:14px}.foot{font-family:"Oswald";text-transform:uppercase;letter-spacing:2px;font-size:14px;color:#274c6e;margin-top:auto}
+        .print-btn{position:fixed;top:12px;right:12px;font-family:"Oswald";font-weight:700;padding:10px 18px;background:#c8432c;color:#fff;border:none;cursor:pointer}
+        @media print{.print-btn{display:none}}</style>
+        <link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@600;700&family=Bitter:wght@400;600&display=swap" rel=stylesheet>
+        <button class=print-btn onclick=print()>Print / Save PDF</button>
+        <div class=sheet>
+          <div class=brand>PRINT<span class=at>@</span></div>
+          <h1>Print Here</h1>
+          <div class=sub>Send a document from your phone. Pick it up here.</div>
+          <div class=qrbox>${qrsvg}</div>
+          <div class=steps>1 · Scan the code &nbsp;•&nbsp; 2 · Send your file &nbsp;•&nbsp; 3 · Show your pickup code</div>
+          <div class=name>${esc(shop.name)}</div>
+          <div class=foot>Powered by Print@ · print.earthpilot.ai</div>
+        </div>`);
+      }
       if (req.method === 'GET' && url === '/shop/dashboard') {
         const jobs = db.jobsForShop(shop.id); const r = db.shopRating(shop.id);
         const groups = {};
@@ -186,6 +268,7 @@ const server = http.createServer(async (req, res) => {
           <div class=head><h1>PRINT<span class=at>@</span></h1><a class=tag href=/shop/logout>Log out</a></div>
           <h2>${esc(shop.name)}</h2>
           <p class=muted>${esc(shop.address)} · ${r.n ? (Math.round(r.avg * 10) / 10) + '★ (' + r.n + ')' : 'no ratings yet'} · <a href=/shop/dashboard>refresh</a></p>
+          <div class=card><div class=lab>Your shop sign</div><p class=muted>Put a Print@ sign in your window so customers know they can print here.</p><a class=btn href=/shop/sign target=_blank style="display:inline-block;width:auto;padding:10px 18px">Get printable sign + QR</a></div>
           <div class=card><div class=lab>Print queue</div>${rows}</div>`));
       }
       if (req.method === 'GET' && url.startsWith('/shop/file/')) {
