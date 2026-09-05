@@ -15,3 +15,5 @@ data/.printeron-*.progress.json
 
 # Maintainer-only directory scanners (not shipped)
 maintainer/
+
+data/.printeron-*.status.json
