@@ -1915,9 +1915,267 @@
       "state": "District of Columbia",
       "method": "email",
       "bw": "georgetownlibrary@dc.gov"
+    },
+    {
+      "name": "Calcasieu Parish Public Library",
+      "website": "http://www.calcasieulibrary.org/",
+      "source": "http://www.calcasieulibrary.org/devicesfaxprintscan-6040",
+      "harvested": true,
+      "network": "ePRINTit",
+      "method": "email",
+      "bw": "bw-cppl@eprintitsaas.com",
+      "state": "United States"
+    },
+    {
+      "name": "Perry\u2013Casta\u00f1eda Library",
+      "website": "http://www.lib.utexas.edu/pcl/",
+      "source": "http://www.lib.utexas.edu/study-spaces-technology/print",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "mobileprint@austin.utexas.edu",
+      "state": "Travis County"
+    },
+    {
+      "name": "Chicago Public Library",
+      "website": "https://www.chipublib.org/",
+      "source": "https://www.chipublib.org/use-a-computer-or-printer/",
+      "harvested": true,
+      "network": "ePRINTit",
+      "method": "email",
+      "bw": "mobileprinting@chipublib.org",
+      "state": "United States"
+    },
+    {
+      "name": "Everett Public Library",
+      "website": "http://www.epls.org/",
+      "source": "http://www.epls.org/236/Print-Copy-Scan-Fax",
+      "harvested": true,
+      "network": "ewprints",
+      "method": "email",
+      "bw": "epls.bw@ewprints.com",
+      "stems": [
+        "epls"
+      ],
+      "state": "United States"
+    },
+    {
+      "name": "Bridgeville Public Library",
+      "website": "https://bridgevillelibrary.org/",
+      "source": "https://bridgevillelibrary.org/eprintit/",
+      "harvested": true,
+      "network": "ePRINTit",
+      "method": "email",
+      "bw": "bw-bridgeville@eprintitsaas.com",
+      "state": "Allegheny County"
+    },
+    {
+      "name": "Sugarcreek Branch",
+      "website": "https://www.tusclibrary.org/sugarcreek",
+      "source": "https://www.tusclibrary.org/print-on-the-go",
+      "harvested": true,
+      "network": "Princh",
+      "method": "princh",
+      "princh_pid": "105509",
+      "portal": "https://print.princh.com/?pid=105509",
+      "state": "United States"
+    },
+    {
+      "name": "Brownell Library",
+      "website": "https://brownelllibrary.org/",
+      "source": "https://brownelllibrary.org/email-to-print/",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "frontdesk@brownelllibrary.org",
+      "state": "United States"
+    },
+    {
+      "name": "American Geographical Society Library",
+      "website": "https://uwm.edu/libraries/agsl/",
+      "source": "https://uwm.edu/information-technology/printstations/",
+      "harvested": true,
+      "network": "Wepa",
+      "method": "email",
+      "bw": "print@wepanow.com",
+      "state": "Milwaukee County"
+    },
+    {
+      "name": "University of Nevada, Reno. University Libraries",
+      "website": "https://library.unr.edu/",
+      "source": "https://library.unr.edu/resources/technology-and-spaces/printing-and-scanning",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "studentprint@unr.edu",
+      "state": "Washoe County"
+    },
+    {
+      "name": "Warsaw Community Public Library",
+      "website": "https://www.warsawlibrary.org/",
+      "source": "https://www.warsawlibrary.org/using-the-library/print-scan-fax-or-copy/",
+      "harvested": true,
+      "network": "Princh",
+      "method": "princh",
+      "princh_pid": "110967",
+      "portal": "https://print.princh.com/?pid=110967",
+      "state": "Kosciusko County"
+    },
+    {
+      "name": "McCain Library, Agnes Scott College",
+      "website": "https://www.agnesscott.edu/library/",
+      "source": "https://www.agnesscott.edu/library/using-the-library/printing-scanning-copying.html",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "scottieprinting@agnesscott.edu",
+      "state": "DeKalb County"
+    },
+    {
+      "name": "East Cleveland Public Library",
+      "website": "http://www.eastclevelandpubliclibrary.org/",
+      "source": "http://www.eastclevelandpubliclibrary.org/use/creative-print-center",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "printecpl@gmail.com",
+      "state": "Ohio"
+    },
+    {
+      "name": "University of Texas Libraries",
+      "website": "https://www.lib.utexas.edu/",
+      "source": "https://www.lib.utexas.edu/study-spaces-technology/print",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "mobileprint@austin.utexas.edu",
+      "state": "Travis County"
+    },
+    {
+      "name": "Tenley-Friendship Neighborhood Library",
+      "website": "https://www.dclibrary.org/tenley",
+      "source": "https://www.dclibrary.org/using-the-library/public-computers-printing",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "anacostialibrary@dc.gov",
+      "state": "District of Columbia"
+    },
+    {
+      "name": "Northeast Neighborhood Library",
+      "website": "https://www.dclibrary.org/northeast",
+      "source": "https://www.dclibrary.org/using-the-library/public-computers-printing",
+      "harvested": true,
+      "network": "",
+      "method": "email",
+      "bw": "northeastlibrary@dc.gov"
+    },
+    {
+      "name": "Palisades Neighborhood Library",
+      "website": "https://www.dclibrary.org/palisades",
+      "source": "https://www.dclibrary.org/using-the-library/public-computers-printing",
+      "harvested": true,
+      "network": "",
+      "method": "email",
+      "bw": "palisadeslibrary@dc.gov"
+    },
+    {
+      "name": "Parklands-Turner Neighborhood Library",
+      "website": "https://www.dclibrary.org/parklands",
+      "source": "https://www.dclibrary.org/using-the-library/public-computers-printing",
+      "harvested": true,
+      "network": "",
+      "method": "email",
+      "bw": "parklandsturnerlibrary@dc.gov"
+    },
+    {
+      "name": "Ernest F. Hollings Special Collections Library",
+      "website": "https://sc.edu/about/offices_and_divisions/university_libraries/browse/index.php",
+      "source": "https://sc.edu/about/offices_and_divisions/university_libraries/find_services/technology_services/printing/index.php",
+      "harvested": true,
+      "network": "PrintMe",
+      "method": "email",
+      "bw": "print@printme.com"
+    },
+    {
+      "name": "University of Tennessee Knoxville Libraries",
+      "website": "http://www.lib.utk.edu/",
+      "source": "http://www.lib.utk.edu/services/large-format-printing",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "studioprint@utk.edu"
+    },
+    {
+      "name": "University of South Carolina Music Library",
+      "website": "https://sc.edu/about/offices_and_divisions/university_libraries/about/locations/music_library/index.php",
+      "source": "https://sc.edu/about/offices_and_divisions/university_libraries/find_services/technology_services/printing/index.php",
+      "harvested": true,
+      "network": "PrintMe",
+      "method": "email",
+      "bw": "print@printme.com"
+    },
+    {
+      "name": "George F. DeVine Music Library",
+      "website": "https://www.lib.utk.edu/music/",
+      "source": "https://www.lib.utk.edu/services/large-format-printing",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "studioprint@utk.edu"
+    },
+    {
+      "name": "University of Texas at Austin Fine Arts Library",
+      "website": "https://www.lib.utexas.edu/about/locations/fine-arts",
+      "source": "https://www.lib.utexas.edu/study-spaces-technology/print",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "mobileprint@austin.utexas.edu"
+    },
+    {
+      "name": "John S. Chase Architecture and Planning Library",
+      "website": "https://www.lib.utexas.edu/about/locations/architecture-planning",
+      "source": "https://www.lib.utexas.edu/study-spaces-technology/print",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "mobileprint@austin.utexas.edu",
+      "state": "United States"
+    },
+    {
+      "name": "Mildred Johnson Library",
+      "website": "https://ndscs.edu/wildcat-life/campus-buildings-services/library/",
+      "source": "https://ndscs.edu/wildcat-life/campus-buildings-services/print-services/",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "ndscs.printservices@ndscs.edu",
+      "state": "United States"
+    },
+    {
+      "name": "Handley Library",
+      "website": "https://www.handleyregional.org/",
+      "source": "https://www.handleyregional.org/services/beyond-books/copy-scan-fax",
+      "harvested": true,
+      "network": "PrintMe",
+      "method": "email",
+      "bw": "print@printme.com",
+      "state": "Virginia"
+    },
+    {
+      "name": "Bernard Becker Medical Library",
+      "website": "https://becker.wustl.edu/",
+      "source": "https://becker.wustl.edu/about/print-and-copy/",
+      "harvested": true,
+      "network": "unknown",
+      "method": "email",
+      "bw": "print@wustl.edu",
+      "state": "Missouri"
     }
   ],
   "harvested_at": "2026-09-04T23:35:10.857Z",
   "crawled_at": "2026-09-04T23:52:41.001Z",
-  "ai_extracted_at": "2026-09-05T06:36:41.719356Z"
+  "ai_extracted_at": "2026-09-05T06:36:41.719356Z",
+  "expanded_at": "2026-09-05T18:44:01.743442+00:00"
 }
