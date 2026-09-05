@@ -32,8 +32,9 @@ if a.cc:
     msg['Cc'] = a.cc
 msg['Subject'] = a.subject
 msg.set_content(open(a.body_file, encoding='utf-8').read())
-with open(a.attach, 'rb') as f:
-    msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(a.attach))
+if a.attach and a.attach != '/dev/null' and os.path.exists(a.attach) and os.path.getsize(a.attach) > 0:
+    with open(a.attach, 'rb') as f:
+        msg.add_attachment(f.read(), maintype='application', subtype='pdf', filename=os.path.basename(a.attach))
 
 with smtplib.SMTP(a.host, a.port, timeout=60) as s:
     s.starttls()
