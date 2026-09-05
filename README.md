@@ -9,6 +9,16 @@
 
 # Print@™
 
+**Two parts, one project:**
+- **The driver** (this repo) — free and open source. A macOS printer that finds the nearest
+  print shop and sends the job: chains, hotels, libraries, PrinterOn, PrintMe, and local shops.
+  Download it here and run it yourself.
+- **Print@ Network** (`network/`, hosted at [print.earthpilot.ai](https://print.earthpilot.ai)) —
+  the two-sided marketplace we run: any shop with a printer can offer printing, customers send
+  jobs and pick up with a code. The code is here for reference; the live service is maintained
+  by us. A web portal (`portal/`) brings the same finder to any phone with no install.
+
+
 A virtual printer for macOS. Pick **Print@ Nearby** in any Print dialog and the job goes to
 the closest print shop that fits your priorities instead of to a device on your desk. Once a
 shop has been used it becomes its own printer: **Print@ Staples, Eureka**, **Print@ The UPS
