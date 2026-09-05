@@ -18,9 +18,10 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS jobs(
     id INTEGER PRIMARY KEY, shop_id INTEGER, customer_name TEXT, customer_email TEXT,
     filename TEXT, filepath TEXT, pages INTEGER, copies INTEGER, color INTEGER,
-    pickup_code TEXT, status TEXT DEFAULT 'queued', rate_token TEXT, created INTEGER, printed INTEGER);
+    pickup_code TEXT, group_id TEXT, status TEXT DEFAULT 'queued', rate_token TEXT, created INTEGER, printed INTEGER);
   CREATE TABLE IF NOT EXISTS ratings(id INTEGER PRIMARY KEY, shop_id INTEGER, job_id INTEGER, stars INTEGER, comment TEXT, created INTEGER);
 `);
+try { db.exec('ALTER TABLE jobs ADD COLUMN group_id TEXT'); } catch {}
 const now = () => Date.now();
 const rid = (n = 16) => require('crypto').randomBytes(n).toString('hex');
 const code = () => String(Math.floor(100000 + Math.random() * 900000));
@@ -46,10 +47,16 @@ module.exports = {
   makeSession(shop_id, days = 30) { const t = rid(24); db.prepare('INSERT INTO sessions(token,shop_id,expires) VALUES(?,?,?)').run(t, shop_id, now() + days * 864e5); return t; },
   session(t) { const row = db.prepare('SELECT * FROM sessions WHERE token=?').get(t || ''); if (!row || row.expires < now()) return null; return row; },
   // jobs
-  createJob(j) { const pc = code(), rt = rid(12);
-    const r = db.prepare(`INSERT INTO jobs(shop_id,customer_name,customer_email,filename,filepath,pages,copies,color,pickup_code,rate_token,status,created)
-      VALUES(?,?,?,?,?,?,?,?,?,?,'queued',?)`).run(j.shop_id, j.customer_name, j.customer_email, j.filename, j.filepath, j.pages || 0, j.copies || 1, j.color ? 1 : 0, pc, rt, now());
-    return { id: r.lastInsertRowid, pickup_code: pc, rate_token: rt }; },
+  createJob(j) { return this.createJobGroup(j, [{ filename: j.filename, filepath: j.filepath, copies: j.copies, color: j.color }]); },
+  createJobGroup(base, items) {
+    const pc = code(), rt = rid(12), gid = rid(8); let firstId = null;
+    for (const it of items) {
+      const r = db.prepare(`INSERT INTO jobs(shop_id,customer_name,customer_email,filename,filepath,pages,copies,color,pickup_code,group_id,rate_token,status,created)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,'queued',?)`).run(base.shop_id, base.customer_name, base.customer_email, it.filename, it.filepath, it.pages || 0, it.copies || 1, it.color ? 1 : 0, pc, gid, rt, now());
+      if (firstId == null) firstId = r.lastInsertRowid;
+    }
+    return { id: firstId, pickup_code: pc, rate_token: rt, group_id: gid };
+  },
   jobsForShop: id => db.prepare("SELECT * FROM jobs WHERE shop_id=? ORDER BY created DESC LIMIT 100").all(id),
   jobById: id => db.prepare('SELECT * FROM jobs WHERE id=?').get(id),
   jobByRateToken: t => db.prepare('SELECT * FROM jobs WHERE rate_token=?').get(t || ''),

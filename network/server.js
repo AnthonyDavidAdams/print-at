@@ -47,29 +47,45 @@ const page = (title, inner) => `<!doctype html><meta charset=utf-8><meta name=vi
 function customerPage() {
   return page('Print@ Network', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/shop">For shops »</a></span></div>
   <p class=tag>Send a file to a nearby shop. Pick it up with a code.</p>
-  <div class=card><div class=lab>1 · Document</div>
-    <label>PDF or photo<input type=file id=file accept="application/pdf,image/*"></label>
-    <div class=row><div><label>Color<select id=color><option value=bw>B&amp;W</option><option value=color>Color</option></select></div>
-    <div><label>Copies<input id=copies value=1 inputmode=numeric></div></div>
+  <div class=card><div class=lab>1 · Documents</div>
+    <label>Add PDFs or photos (you can pick several)<input type=file id=file accept="application/pdf,image/*" multiple></label>
+    <div id=items></div>
     <label>Your name<input id=cname placeholder="For the pickup"></label>
     <label>Your email<input id=cemail inputmode=email placeholder="you@example.com"></label>
     <button class=btn id=find>Find shops near me</button><div class=muted id=note style=margin-top:8px></div></div>
   <div class=card id=shops style=display:none><div class=lab>2 · Pick a shop</div><div id=list></div></div>
   <div class=card id=send style=display:none><div class=lab>3 · Send</div><div id=pick></div><button class=btn red id=go>Send to shop</button><div id=result></div></div>
   <script>
-  var f={},pick=null;
-  file.onchange=e=>{var x=e.target.files[0];if(!x)return;f.name=x.name;var r=new FileReader();r.onload=()=>f.b64=r.result.split(',')[1];r.readAsDataURL(x)};
-  find.onclick=()=>{if(!f.b64)return alert('Choose a file');note.textContent='Locating…';
-    navigator.geolocation.getCurrentPosition(p=>{f.lat=p.coords.latitude;f.lon=p.coords.longitude;
-      fetch('/api/shops-nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lat:f.lat,lon:f.lon})}).then(r=>r.json()).then(d=>{
+  var items=[],pick=null;
+  function render(){var box=document.getElementById('items');box.innerHTML=items.map((it,i)=>
+    '<div class=job style="display:flex;gap:10px;align-items:center;margin-top:10px">'+
+    (it.thumb?'<img src="'+it.thumb+'" style="width:46px;height:60px;object-fit:cover;border:1px solid #1c3a57">':'<div style="width:46px;height:60px;border:1px solid #1c3a57;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:11px">PDF</div>')+
+    '<div style=flex:1;min-width:0><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b>'+it.name+'</b></div>'+
+    '<div class=row style=margin-top:4px>'+
+    '<select data-i='+i+' class=ic style="padding:6px"><option value=bw>B&W</option><option value=color '+(it.color=='color'?'selected':'')+'>Color</option></select>'+
+    '<input data-i='+i+' class=iq value='+it.copies+' inputmode=numeric style="padding:6px" title=copies>'+
+    '<button data-i='+i+' class=irm style="width:auto;padding:6px 10px;background:#c8432c;border:2px solid #c8432c;color:#fff;font-family:Oswald;cursor:pointer">✕</button>'+
+    '</div></div></div>').join('');
+    box.querySelectorAll('.ic').forEach(el=>el.onchange=e=>items[e.target.dataset.i].color=e.target.value);
+    box.querySelectorAll('.iq').forEach(el=>el.onchange=e=>items[e.target.dataset.i].copies=Math.max(1,parseInt(e.target.value)||1));
+    box.querySelectorAll('.irm').forEach(el=>el.onclick=e=>{items.splice(e.target.dataset.i,1);render()});
+  }
+  file.onchange=e=>{[...e.target.files].forEach(x=>{
+    var it={name:x.name,copies:1,color:'bw',b64:null,thumb:null};
+    var r=new FileReader();r.onload=()=>{it.b64=r.result.split(',')[1];if(x.type.startsWith('image/'))it.thumb=r.result;render()};r.readAsDataURL(x);
+    items.push(it);
+  });e.target.value='';render()};
+  find.onclick=()=>{if(!items.length)return alert('Add at least one file');if(items.some(it=>!it.b64))return alert('Still reading a file, one sec');note.textContent='Locating…';
+    navigator.geolocation.getCurrentPosition(p=>{window._loc={lat:p.coords.latitude,lon:p.coords.longitude};
+      fetch('/api/shops-nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(window._loc)}).then(r=>r.json()).then(d=>{
         if(!d.shops.length){note.textContent='No Print@ Network shops near you yet.';return}
         note.textContent=d.shops.length+' shops';list.innerHTML=d.shops.map(s=>'<div class=job data-id='+s.id+' style=cursor:pointer><b>'+s.name+'</b> '+(s.stars?'<span class=stars>'+'\\u2605'.repeat(Math.round(s.stars))+'</span>':'')+'<div class=m>'+s.distance_mi+' mi · '+s.address+'</div><div class=m>'+(s.hours||'')+' · B&W '+(s.price_bw||'?')+' color '+(s.price_color||'?')+'</div></div>').join('');
         shops.style.display='block';
         document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+pick.name+'</b><br>'+pick.address;send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
       })},()=>note.textContent='Allow location and retry',{enableHighAccuracy:true,timeout:12000})};
   go.onclick=()=>{if(!pick)return;result.innerHTML='Sending…';
-    fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,name:cname.value,email:cemail.value,color:color.value,copies:copies.value,filename:f.name,fileB64:f.b64})}).then(r=>r.json()).then(d=>{
-      if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent to '+pick.name+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
+    fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,name:cname.value,email:cemail.value,items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
+      if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent '+d.count+' file'+(d.count>1?'s':'')+' to '+pick.name+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
       else result.innerHTML='Error: '+(d.error||'failed')})};
   </script>`);
 }
@@ -94,11 +110,19 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/send') {
       const b = JSON.parse((await body(req)).toString() || '{}');
       const shop = db.shopById(Number(b.shop_id)); if (!shop) return json(res, 404, { error: 'shop not found' });
-      const fp = path.join(db.DIR, 'files', db.rid(10) + '-' + String(b.filename || 'doc.pdf').replace(/[^\w.]+/g, '_'));
-      fs.writeFileSync(fp, Buffer.from(b.fileB64, 'base64'));
-      const job = db.createJob({ shop_id: shop.id, customer_name: b.name, customer_email: b.email, filename: b.filename, filepath: fp, copies: Number(b.copies) || 1, color: b.color === 'color' });
-      mail(shop.email, `New print job — pickup ${job.pickup_code}`, `${b.name || 'A customer'} sent a print job to ${shop.name}.\n\nOpen your queue to print it: ${BASE}/shop/dashboard\n\nPickup code: ${job.pickup_code}`);
-      return json(res, 200, { pickup_code: job.pickup_code });
+      const items = (b.items && b.items.length) ? b.items : [{ filename: b.filename, fileB64: b.fileB64, copies: b.copies, color: b.color }];
+      const saved = [];
+      for (const it of items) {
+        if (!it.fileB64) continue;
+        const fp = path.join(db.DIR, 'files', db.rid(10) + '-' + String(it.filename || 'doc.pdf').replace(/[^\w.]+/g, '_'));
+        fs.writeFileSync(fp, Buffer.from(it.fileB64, 'base64'));
+        saved.push({ filename: it.filename, filepath: fp, copies: Number(it.copies) || 1, color: it.color === 'color' });
+      }
+      if (!saved.length) return json(res, 400, { error: 'no files' });
+      const job = db.createJobGroup({ shop_id: shop.id, customer_name: b.name, customer_email: b.email }, saved);
+      const listing = saved.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n');
+      mail(shop.email, `New print job (${saved.length} file${saved.length > 1 ? 's' : ''}) — pickup ${job.pickup_code}`, `${b.name || 'A customer'} sent ${saved.length} file${saved.length > 1 ? 's' : ''} to ${shop.name}:\n${listing}\n\nOpen your queue to print: ${BASE}/shop/dashboard\n\nPickup code: ${job.pickup_code}`);
+      return json(res, 200, { pickup_code: job.pickup_code, count: saved.length });
     }
 
     // shop: landing (signup + login)
@@ -148,10 +172,16 @@ const server = http.createServer(async (req, res) => {
       const shop = db.shopById(sess.shop_id);
       if (req.method === 'GET' && url === '/shop/dashboard') {
         const jobs = db.jobsForShop(shop.id); const r = db.shopRating(shop.id);
-        const rows = jobs.map(j => `<div class=job><div class=head><b>${esc(j.customer_name || 'Customer')}</b> <span class="pill ${j.status}">${j.status}</span></div>
-          <div class=m>${esc(j.filename)} · ${j.copies} cop${j.copies === 1 ? 'y' : 'ies'} · ${j.color ? 'color' : 'B&W'} · code ${j.pickup_code}</div>
-          <div style=margin-top:8px>${j.status === 'queued' ? `<a class=btn href="/shop/file/${j.id}" target=_blank style="display:inline-block;width:auto;padding:8px 16px">Open &amp; print</a> ` : ''}
-          ${j.status !== 'done' ? `<form method=post action="/shop/job/${j.id}/done" style="display:inline"><button class=btn style="display:inline-block;width:auto;padding:8px 16px;background:#2e7d4f;border-color:#2e7d4f;box-shadow:4px 4px 0 #1c4a2f">Mark picked up</button></form>` : ''}</div></div>`).join('') || '<p class=muted>No jobs yet. Share your shop so people can send you print jobs.</p>';
+        const groups = {};
+        for (const j of jobs) { (groups[j.pickup_code] = groups[j.pickup_code] || []).push(j); }
+        const rows = Object.values(groups).map(g => { const first = g[0]; const anyOpen = g.some(x => x.status !== 'done');
+          const files = g.map(j => `<div class=m style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <span>${esc(j.filename)} · ${j.copies} cop${j.copies === 1 ? 'y' : 'ies'} · ${j.color ? 'color' : 'B&W'}</span>
+            ${j.status !== 'done' ? `<a class=btn href="/shop/file/${j.id}" target=_blank style="display:inline-block;width:auto;padding:5px 12px;margin:0;font-size:12px">Print</a>` : '<span class="pill done">printed</span>'}</div>`).join('');
+          return `<div class=job><div class=head><b>${esc(first.customer_name || 'Customer')}</b> <span class="pill ${anyOpen ? 'queued' : 'done'}">${g.length} file${g.length > 1 ? 's' : ''} · code ${first.pickup_code}</span></div>
+            ${files}
+            ${anyOpen ? `<form method=post action="/shop/group/${first.pickup_code}/done" style="margin-top:10px"><button class=btn style="padding:8px 16px;background:#2e7d4f;border-color:#2e7d4f;box-shadow:4px 4px 0 #1c4a2f">Mark whole order picked up</button></form>` : ''}</div>`;
+        }).join('') || '<p class=muted>No jobs yet. Share your shop so people can send you print jobs.</p>';
         return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page(shop.name + ' — Print@', `
           <div class=head><h1>PRINT<span class=at>@</span></h1><a class=tag href=/shop/logout>Log out</a></div>
           <h2>${esc(shop.name)}</h2>
@@ -161,6 +191,14 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && url.startsWith('/shop/file/')) {
         const j = db.jobById(Number(url.split('/')[3])); if (!j || j.shop_id !== shop.id) return res.writeHead(404).end();
         const buf = fs.readFileSync(j.filepath); res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${j.filename}"` }); return res.end(buf);
+      }
+      if (req.method === 'POST' && /\/shop\/group\/\w+\/done/.test(url)) {
+        const pc = url.split('/')[3];
+        const g = db.jobsForShop(shop.id).filter(j => j.pickup_code === pc);
+        for (const j of g) db.setJobStatus(j.id, 'done');
+        const first = g[0];
+        if (first && first.customer_email) mail(first.customer_email, `Your print at ${shop.name} is ready`, `Your ${g.length} file${g.length > 1 ? 's are' : ' is'} printed and ready at ${shop.name}.\n\nHow was it? Rate the shop: ${BASE}/rate/${first.rate_token}`);
+        return redirect(res, '/shop/dashboard');
       }
       if (req.method === 'POST' && /\/shop\/job\/\d+\/done/.test(url)) {
         const j = db.jobById(Number(url.split('/')[3])); if (j && j.shop_id === shop.id) {
