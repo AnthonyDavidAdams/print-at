@@ -76,14 +76,19 @@ function customerPage(preShop) {
     var r=new FileReader();r.onload=()=>{it.b64=r.result.split(',')[1];if(x.type.startsWith('image/'))it.thumb=r.result;render()};r.readAsDataURL(x);
     items.push(it);
   });e.target.value='';render()};
-  find.onclick=()=>{if(!items.length)return alert('Add at least one file');if(items.some(it=>!it.b64))return alert('Still reading a file, one sec');note.textContent='Locating…';
-    navigator.geolocation.getCurrentPosition(p=>{window._loc={lat:p.coords.latitude,lon:p.coords.longitude};
-      fetch('/api/shops-nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(window._loc)}).then(r=>r.json()).then(d=>{
-        if(!d.shops.length){note.textContent='No Print@ Network shops near you yet.';return}
-        note.textContent=d.shops.length+' shops';list.innerHTML=d.shops.map(s=>'<div class=job data-id='+s.id+' style=cursor:pointer><b>'+s.name+'</b> '+(s.stars?'<span class=stars>'+'\\u2605'.repeat(Math.round(s.stars))+'</span>':'')+'<div class=m>'+s.distance_mi+' mi · '+s.address+'</div><div class=m>'+(s.hours||'')+' · B&W '+(s.price_bw||'?')+' color '+(s.price_color||'?')+'</div></div>').join('');
+  function query(loc){note.textContent='Finding shops…';
+    fetch('/api/shops-nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(loc||{})}).then(r=>r.json()).then(d=>{
+      if(!d.located){note.textContent='Could not find your location. Add ?shop=ID or try again.';return}
+      if(!d.shops.length){note.textContent='No Print@ Network shops within 25 miles yet. Know a shop with a printer? Ask them to join at /join';return}
+      note.textContent=d.shops.length+' shop'+(d.shops.length>1?'s':'')+' near you';list.innerHTML=d.shops.map(s=>'<div class=job data-id='+s.id+' style=cursor:pointer><b>'+s.name+'</b> '+(s.stars?'<span class=stars>'+'\\u2605'.repeat(Math.round(s.stars))+'</span>':'')+'<div class=m>'+s.distance_mi+' mi · '+s.address+'</div><div class=m>'+(s.hours||'')+' · B&W '+(s.price_bw||'?')+' color '+(s.price_color||'?')+'</div></div>').join('');
         shops.style.display='block';
         document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+pick.name+'</b><br>'+pick.address;send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
-      })},()=>note.textContent='Allow location and retry',{enableHighAccuracy:true,timeout:12000})};
+      })}
+  find.onclick=()=>{if(!items.length)return alert('Add at least one file to print');if(items.some(it=>!it.b64))return alert('Still reading a file — one sec');note.textContent='Locating…';
+    if(!navigator.geolocation){query(null);return}
+    var done=false;var t=setTimeout(()=>{if(!done){done=true;note.textContent='Using approximate location…';query(null)}},7000);
+    navigator.geolocation.getCurrentPosition(p=>{if(done)return;done=true;clearTimeout(t);query({lat:p.coords.latitude,lon:p.coords.longitude})},
+      ()=>{if(done)return;done=true;clearTimeout(t);note.textContent='Using approximate location…';query(null)},{enableHighAccuracy:true,timeout:6000})};
   var PRE=%PRESHOP%;
   if(PRE){pick=PRE;document.getElementById('note').textContent='Sending to '+PRE.name;shops.style.display='none';
     var pk=document.getElementById('pick');if(pk)pk.innerHTML='<b>'+PRE.name+'</b><br>'+(PRE.address||'');send.style.display='block';
@@ -104,12 +109,18 @@ const server = http.createServer(async (req, res) => {
 
     // customer: shops nearby
     if (req.method === 'POST' && url === '/api/shops-nearby') {
-      const { lat, lon } = JSON.parse((await body(req)).toString() || '{}');
+      let { lat, lon } = JSON.parse((await body(req)).toString() || '{}');
+      if (typeof lat !== 'number' || typeof lon !== 'number') {
+        const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+        try { const g = await fetch(`http://ip-api.com/json/${ip}?fields=status,lat,lon`, { signal: AbortSignal.timeout(6000) }).then(r => r.json());
+          if (g.status === 'success') { lat = g.lat; lon = g.lon; } } catch {}
+      }
+      if (typeof lat !== 'number' || typeof lon !== 'number') return json(res, 200, { shops: [], located: false });
       const shops = db.activeShops().filter(s => s.lat != null).map(s => { const r = db.shopRating(s.id); return {
         id: s.id, name: s.name, address: s.address, hours: s.hours, price_bw: s.price_bw, price_color: s.price_color,
         distance_mi: Math.round(miles({ lat, lon }, s) * 10) / 10, stars: r.avg ? Math.round(r.avg * 10) / 10 : 0 };
       }).filter(s => s.distance_mi <= 25).sort((a, b) => a.distance_mi - b.distance_mi);
-      return json(res, 200, { shops });
+      return json(res, 200, { shops, located: true });
     }
     // customer: send a job
     if (req.method === 'POST' && url === '/api/send') {
@@ -215,9 +226,33 @@ const server = http.createServer(async (req, res) => {
 
     // shop dashboard (auth required)
     const sess = db.session(cookies(req).pn);
-    if (url.startsWith('/shop/dashboard') || url.startsWith('/shop/job') || url.startsWith('/shop/group') || url.startsWith('/shop/file') || url === '/shop/qr' || url === '/shop/sign') {
+    if (url.startsWith('/shop/dashboard') || url.startsWith('/shop/job') || url.startsWith('/shop/group') || url.startsWith('/shop/file') || url === '/shop/qr' || url === '/shop/sign' || url === '/shop/lookup' || url.startsWith('/shop/anyfile/') || url.startsWith('/shop/code/')) {
       if (!sess) return redirect(res, '/shop');
       const shop = db.shopById(sess.shop_id);
+      if (url === '/shop/lookup') {
+        const codeIn = (q.code || '').trim();
+        let found = codeIn ? db.jobsByCode(codeIn) : [];
+        const files = found.map(j => { const sh = db.shopById(j.shop_id); return `<div class=m style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+          <span>${esc(j.filename)} · ${j.copies} cop${j.copies===1?'y':'ies'} · ${j.color?'color':'B&W'} · <i>sent to ${esc(sh?sh.name:'?')}</i></span>
+          <a class=btn href="/shop/anyfile/${j.id}" target=_blank style="display:inline-block;width:auto;padding:5px 12px;margin:0;font-size:12px">Print</a></div>`; }).join('');
+        return res.writeHead(200,{'Content-Type':'text/html'}), res.end(page('Look up a job', `
+          <div class=head><h1>PRINT<span class=at>@</span></h1><a class=tag href=/shop/dashboard>« Queue</a></div>
+          <h2>Pull up a job by code</h2>
+          <p class=muted>A customer can pick up at <b>any</b> Print@ shop. Enter their 6-digit code to print it here.</p>
+          <form method=get action=/shop/lookup class=card><label>Pickup code<input name=code value="${esc(codeIn)}" inputmode=numeric placeholder="123456" autofocus></label><button class=btn red>Find job</button></form>
+          ${codeIn ? (found.length ? `<div class=card><div class=lab>Code ${esc(codeIn)} — ${found.length} file${found.length>1?'s':''}</div>${files}<form method=post action="/shop/code/${esc(codeIn)}/done" style=margin-top:10px><button class=btn style="padding:8px 16px;background:#2e7d4f;border-color:#2e7d4f;box-shadow:4px 4px 0 #1c4a2f">Mark picked up</button></form></div>` : '<div class=card><p class=muted>No job found for that code.</p></div>') : ''}`));
+      }
+      if (req.method === 'GET' && url.startsWith('/shop/anyfile/')) {
+        const j = db.jobById(Number(url.split('/')[3])); if (!j) return res.writeHead(404).end();
+        const buf = fs.readFileSync(j.filepath); res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${j.filename}"`}); return res.end(buf);
+      }
+      if (req.method === 'POST' && /\/shop\/code\/\w+\/done/.test(url)) {
+        const pc = url.split('/')[3]; const g = db.jobsByCode(pc);
+        for (const j of g) db.setJobStatus(j.id, 'done');
+        const first = g[0];
+        if (first && first.customer_email) mail(first.customer_email, `Your Print@ job is printed`, `Your ${g.length} file${g.length>1?'s were':' was'} printed and picked up.\n\nRate the shop: ${BASE}/rate/${first.rate_token}`);
+        return redirect(res, '/shop/lookup?code=' + encodeURIComponent(pc));
+      }
       if (req.method === 'GET' && url === '/shop/qr') {
         const target = `${BASE}/?shop=${shop.id}`;
         res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
@@ -268,6 +303,7 @@ const server = http.createServer(async (req, res) => {
           <div class=head><h1>PRINT<span class=at>@</span></h1><a class=tag href=/shop/logout>Log out</a></div>
           <h2>${esc(shop.name)}</h2>
           <p class=muted>${esc(shop.address)} · ${r.n ? (Math.round(r.avg * 10) / 10) + '★ (' + r.n + ')' : 'no ratings yet'} · <a href=/shop/dashboard>refresh</a></p>
+          <div class=card><div class=lab>Pick up from any shop</div><p class=muted>Someone printed elsewhere but wants to collect here? Pull up their job by code.</p><a class=btn href=/shop/lookup style="display:inline-block;width:auto;padding:10px 18px">Look up a job by code</a></div>
           <div class=card><div class=lab>Your shop sign</div><p class=muted>Put a Print@ sign in your window so customers know they can print here.</p><a class=btn href=/shop/sign target=_blank style="display:inline-block;width:auto;padding:10px 18px">Get printable sign + QR</a></div>
           <div class=card><div class=lab>Print queue</div>${rows}</div>`));
       }

@@ -60,6 +60,7 @@ module.exports = {
   jobsForShop: id => db.prepare("SELECT * FROM jobs WHERE shop_id=? ORDER BY created DESC LIMIT 100").all(id),
   jobById: id => db.prepare('SELECT * FROM jobs WHERE id=?').get(id),
   jobByRateToken: t => db.prepare('SELECT * FROM jobs WHERE rate_token=?').get(t || ''),
+  jobsByCode: c => db.prepare('SELECT * FROM jobs WHERE pickup_code=? ORDER BY id').all(String(c || '').trim()),
   setJobStatus(id, status) { db.prepare('UPDATE jobs SET status=?, printed=? WHERE id=?').run(status, status === 'printed' || status === 'done' ? now() : null, id); },
   // ratings
   addRating(shop_id, job_id, stars, comment) { db.prepare('INSERT INTO ratings(shop_id,job_id,stars,comment,created) VALUES(?,?,?,?,?)').run(shop_id, job_id, stars, comment || '', now()); },
