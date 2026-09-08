@@ -122,6 +122,11 @@ async function findCandidates(loc, shopType, maxDistance, pin = '') {
     } catch (e) { log(`printme lookup skipped: ${e.message}`); }
   }
   for (const c of mapped) libraryprint.enrich(c);
+  // prefer email over portal: any candidate that has an email loses its portal fallback
+  for (const c of mapped) {
+    const email = (c.printeron && c.printeron.email) || (c.printme && c.printme.email) || (c.library_print && c.library_print.email) || c.chain_email;
+    if (email) c.portal = '';
+  }
   return mapped;
 }
 

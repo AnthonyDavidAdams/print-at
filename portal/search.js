@@ -82,6 +82,7 @@ async function nearby(loc, radiusMi = 15) {
     if (seen.has(k)) continue; seen.add(k);
     c.distance_mi = c.distance_mi ?? (c.lat != null ? Math.round(miles(loc, c) * 10) / 10 : null);
     c.email = (c.printeron && c.printeron.email) || (c.printme && c.printme.email) || (c.library_print && c.library_print.email) || c.chain_email || '';
+    if (c.email) c.portal = '';  // prefer email, suppress portal
     c.automatable = !!c.email;
     if (!c.how) c.how = c.email ? `email ${c.email}` : c.portal ? 'online upload' : 'walk-in';
     list.push(c);
