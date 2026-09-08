@@ -50,4 +50,6 @@ function enrich(candidate) {
   return candidate;
 }
 
-module.exports = { lookup, enrich, addresses };
+// Wepa uses one universal email-to-print address everywhere.
+const WEPA = 'print@wepanow.com';
+module.exports = { lookup, enrich, addresses, WEPA };
