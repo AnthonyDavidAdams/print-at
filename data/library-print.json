@@ -2177,5 +2177,13 @@
   "harvested_at": "2026-09-04T23:35:10.857Z",
   "crawled_at": "2026-09-04T23:52:41.001Z",
   "ai_extracted_at": "2026-09-05T06:36:41.719356Z",
-  "expanded_at": "2026-09-05T18:44:01.743442+00:00"
+  "expanded_at": "2026-09-05T18:44:01.743442+00:00",
+  "networks_note": {
+    "Princh": "web portal print.princh.com/?pid=N (NOT email)",
+    "ewprints": "EnvisionWare, <code>-bw@ewprints.com",
+    "eprintitsaas": "ePRINTit, bw-<code>@eprintitsaas.com",
+    "wepa": "universal email print@wepanow.com (color/duplex in body)",
+    "papercut": "per-campus email, no universal address",
+    "printme": "staples@/officedepot@/print@printme.com"
+  }
 }
