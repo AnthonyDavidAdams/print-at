@@ -2,10 +2,10 @@
 'use strict';
 // Print@ MCP server — lets an AI agent find nearby print shops, send a document to one,
 // and get the pickup code + status. Dependency-free JSON-RPC 2.0 over stdio (MCP).
-// Talks to the Print@ cloud (print.earthpilot.ai) so it works from anywhere.
+// Talks to the Print@ cloud (printat.co) so it works from anywhere.
 const fs = require('fs');
 
-const BASE = process.env.PRINTAT_BASE || 'https://print.earthpilot.ai';
+const BASE = process.env.PRINTAT_BASE || 'https://printat.co';
 const NAME = 'print-at';
 const VERSION = '1.0.0';
 

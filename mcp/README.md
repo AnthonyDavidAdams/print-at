@@ -12,7 +12,7 @@ pickup code. Dependency-free MCP (JSON-RPC over stdio); talks to the Print@ clou
 ```json
 { "mcpServers": { "print-at": { "command": "node", "args": ["/path/to/print-at/mcp/server.js"] } } }
 ```
-Point at a different backend with `PRINTAT_BASE` (default https://print.earthpilot.ai).
+Point at a different backend with `PRINTAT_BASE` (default https://printat.co).
 
 Example: "Find a print shop near 40.87,-124.08 and print ~/resume.pdf, 2 copies, color."
 The agent calls find_print_shops → send_print_job → hands you the pickup code.
