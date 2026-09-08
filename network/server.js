@@ -293,7 +293,7 @@ const server = http.createServer(async (req, res) => {
           <div class=qrbox>${qrsvg}</div>
           <div class=steps>1 · Scan the code &nbsp;•&nbsp; 2 · Send your file &nbsp;•&nbsp; 3 · Show your pickup code</div>
           <div class=name>${esc(shop.name)}</div>
-          <div class=foot>Powered by Print@ · print.earthpilot.ai</div>
+          <div class=foot>Powered by Print@ · printat.co</div>
         </div>`);
       }
       if (req.method === 'GET' && url === '/shop/dashboard') {
