@@ -122,6 +122,15 @@ const server = http.createServer(async (req, res) => {
       }).filter(s => s.distance_mi <= 25).sort((a, b) => a.distance_mi - b.distance_mi);
       return json(res, 200, { shops, located: true });
     }
+    // status of a job group by pickup code
+    if (req.method === 'GET' && url === '/api/status') {
+      const g = db.jobsByCode(q.code || '');
+      if (!g.length) return json(res, 404, { error: 'no job for that code' });
+      const shop = db.shopById(g[0].shop_id);
+      return json(res, 200, { pickup_code: g[0].pickup_code, shop: shop ? shop.name : '', address: shop ? shop.address : '',
+        files: g.map(j => ({ filename: j.filename, copies: j.copies, color: !!j.color, status: j.status })),
+        status: g.every(j => j.status === 'done') ? 'done' : g.some(j => j.status !== 'queued') ? 'in_progress' : 'queued' });
+    }
     // customer: send a job
     if (req.method === 'POST' && url === '/api/send') {
       const b = JSON.parse((await body(req)).toString() || '{}');
