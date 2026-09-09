@@ -13,10 +13,12 @@
 - **The driver** (this repo) — free and open source. A macOS printer that finds the nearest
   print shop and sends the job: chains, hotels, libraries, PrinterOn, PrintMe, and local shops.
   Download it here and run it yourself.
-- **Print@ Network** (`network/`, hosted at [print.earthpilot.ai](https://print.earthpilot.ai)) —
+- **Print@ Network** (`network/`, hosted at [printat.co](https://printat.co)) —
   the two-sided marketplace we run: any shop with a printer can offer printing, customers send
   jobs and pick up with a code. The code is here for reference; the live service is maintained
   by us. A web portal (`portal/`) brings the same finder to any phone with no install.
+- **MCP server** (`mcp/`) — lets any AI agent find a shop, send a document and get a pickup
+  code. Point it at the cloud and your agent can print into the physical world.
 
 
 A virtual printer for macOS. Pick **Print@ Nearby** in any Print dialog and the job goes to

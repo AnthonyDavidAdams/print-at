@@ -145,6 +145,7 @@
     <a href="#reach">Reach</a>
     <a href="#board">The Board</a>
     <a href="#network">Network</a>
+    <a href="#agents">Agents</a>
     <a class="btn" href="https://github.com/AnthonyDavidAdams/print-at">GitHub &#9733;</a>
   </div>
 </div></nav>
@@ -197,7 +198,7 @@
     <div class="feat"><div class="t">KIOSKS</div><h3>1,979 PrintMe locations</h3><p>Email a PDF, get a barcode, print at the machine. Office Depot, campuses.</p></div>
     <div class="feat"><div class="t">LOCAL</div><h3>Any local copy shop</h3><p>The independent two blocks over that no network app can see. Found on the map, ranked too.</p></div>
     <div class="feat"><div class="t">AI PICKS</div><h3>It chooses for you</h3><p>Verifies today's hours, real prices and how each shop takes files, then ranks.</p></div>
-    <div class="feat"><div class="t">YOURS</div><h3>Runs on your Mac</h3><p>Your files, your email, your rules. No account, no cloud lock-in. MIT.</p></div>
+    <div class="feat"><div class="t">YOURS</div><h3>Runs on your Mac</h3><p>Your files, your rules. No account, no cloud lock-in. MIT. Windows &amp; Linux ports are started — <a href="https://github.com/AnthonyDavidAdams/print-at" style="color:var(--red)">help wanted</a>.</p></div>
   </div>
 </div></section>
 
@@ -254,6 +255,23 @@
   </div>
   <p class="disc" style="margin-bottom:0">The macOS driver is free and open source. The web portal and shop network are a hosted service we run.</p>
   <p class="disc">Print@ is an independent, open-source project and is not affiliated with, endorsed by, or sponsored by FedEx, Staples, Office Depot, The UPS Store, PrinterOn, PrintMe/EFI, or any hotel or library. All product names, logos and brands are property of their respective owners and are shown only to describe compatibility.</p>
+</div></section>
+
+<section id="agents"><div class="wrap">
+  <div class="lab">For AI agents</div>
+  <h2>Your agent can print for you.</h2>
+  <p class="lead">Print@ ships an <b>MCP server</b>, so any AI agent (Claude, or your own) can find a print shop, send a document, and hand back a pickup code — printing into the physical world, on its own.</p>
+  <div class="feats" style="margin-top:34px">
+    <div class="feat"><div class="t">find_print_shops</div><h3>Locate</h3><p>Nearby shops with prices, hours and ratings.</p></div>
+    <div class="feat"><div class="t">send_print_job</div><h3>Print</h3><p>Send a file to a shop, get a 6-digit pickup code back.</p></div>
+    <div class="feat"><div class="t">get_job_status</div><h3>Track</h3><p>Queued, in progress, or ready to collect.</p></div>
+  </div>
+  <div class="card" style="background:var(--ink);color:var(--paper);border:none;margin-top:26px;font-family:'JetBrains Mono',monospace;font-size:13px;padding:18px 20px;overflow:auto">
+    <div style="color:var(--gold)">// claude_desktop_config.json</div>
+    "print-at": { "command": "node", "args": ["print-at/mcp/server.js"] }
+  </div>
+  <p class="lead" style="margin-top:18px"><i>"Print my boarding pass at a shop near the airport."</i> — the agent does the rest.</p>
+  <div class="cta" style="margin-top:22px"><a class="btn red" href="https://github.com/AnthonyDavidAdams/print-at/tree/main/mcp">Get the MCP server</a></div>
 </div></section>
 
 <section class="accelband"><div class="wrap">
