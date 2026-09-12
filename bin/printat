@@ -1,0 +1,23 @@
+#!/bin/bash
+# Print@ command line. Mostly you never need this — the printer just works from the
+# Print dialog. The one useful command is connecting this Mac to the Print@ cloud.
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+NODE="$(command -v node)"
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  connect)    exec "$NODE" "$DIR/agent/connect.js" "$@" ;;
+  status)     exec "$NODE" "$DIR/agent/connect.js" --status ;;
+  disconnect) exec "$NODE" "$DIR/agent/connect.js" --disconnect ;;
+  *)
+    echo "Print@ — nearest print shop, from any Print dialog."
+    echo
+    echo "Usage:"
+    echo "  printat connect [email]   Link this Mac to the Print@ cloud (printat.co):"
+    echo "                            print through the network, branded sender, pickup"
+    echo "                            codes — no local email setup."
+    echo "  printat status            Show whether this Mac is connected."
+    echo "  printat disconnect        Go back to fully local mode (send from your own email)."
+    echo
+    echo "Print settings (priority, radius, shop type, color) live in the Print dialog."
+    ;;
+esac

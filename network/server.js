@@ -109,7 +109,8 @@ const server = http.createServer(async (req, res) => {
 
     // customer: shops nearby
     if (req.method === 'POST' && url === '/api/shops-nearby') {
-      let { lat, lon } = JSON.parse((await body(req)).toString() || '{}');
+      let { lat, lon, radiusMi } = JSON.parse((await body(req)).toString() || '{}');
+      const radius = Math.min(100, Number(radiusMi) || 25);
       if (typeof lat !== 'number' || typeof lon !== 'number') {
         const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
         try { const g = await fetch(`http://ip-api.com/json/${ip}?fields=status,lat,lon`, { signal: AbortSignal.timeout(6000) }).then(r => r.json());
@@ -118,8 +119,8 @@ const server = http.createServer(async (req, res) => {
       if (typeof lat !== 'number' || typeof lon !== 'number') return json(res, 200, { shops: [], located: false });
       const shops = db.activeShops().filter(s => s.lat != null).map(s => { const r = db.shopRating(s.id); return {
         id: s.id, name: s.name, address: s.address, hours: s.hours, price_bw: s.price_bw, price_color: s.price_color,
-        distance_mi: Math.round(miles({ lat, lon }, s) * 10) / 10, stars: r.avg ? Math.round(r.avg * 10) / 10 : 0 };
-      }).filter(s => s.distance_mi <= 25).sort((a, b) => a.distance_mi - b.distance_mi);
+        distance_mi: Math.round(miles({ lat, lon }, s) * 10) / 10, stars: r.avg ? Math.round(r.avg * 10) / 10 : 0,
+        lat: s.lat, lon: s.lon }; }).filter(s => s.distance_mi <= radius).sort((a, b) => a.distance_mi - b.distance_mi);
       return json(res, 200, { shops, located: true });
     }
     // status of a job group by pickup code
@@ -148,6 +149,47 @@ const server = http.createServer(async (req, res) => {
       const listing = saved.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n');
       mail(shop.email, `New print job (${saved.length} file${saved.length > 1 ? 's' : ''}) — pickup ${job.pickup_code}`, `${b.name || 'A customer'} sent ${saved.length} file${saved.length > 1 ? 's' : ''} to ${shop.name}:\n${listing}\n\nOpen your queue to print: ${BASE}/shop/dashboard\n\nPickup code: ${job.pickup_code}`);
       return json(res, 200, { pickup_code: job.pickup_code, count: saved.length });
+    }
+
+    // ---- DRIVER DEVICE AUTHORIZATION (magic link) ----
+    // The open-source driver links this Mac so it can dispatch through the cloud.
+    if (req.method === 'POST' && url === '/api/device/start') {
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      if (!b.email || !String(b.email).includes('@')) return json(res, 400, { error: 'valid email required' });
+      const { poll, magic } = db.makeDevicePoll(b.email, b.name, b.device);
+      mail(b.email, 'Connect your Mac to Print@',
+        `You (or the Print@ driver on "${b.device || 'your Mac'}") asked to connect to Print@.\n\nConfirm this device:\n${BASE}/device/confirm?c=${magic}\n\nAfter you confirm, your Mac will print through Print@ — no email setup, Print@ Network shops, pickup codes. This link expires in 15 minutes. If you didn't request it, ignore this email.`);
+      return json(res, 200, { poll });
+    }
+    if (req.method === 'GET' && url === '/device/confirm') {
+      const row = db.confirmDevicePoll(q.c);
+      if (!row) return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Link expired', `<div class=head><h1>PRINT<span class=at>@</span></h1></div><div class=card><p>That link expired or was already used. Run <b>printat connect</b> on your Mac again.</p></div>`));
+      return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Device connected', `<div class=head><h1>PRINT<span class=at>@</span></h1></div>
+        <div class=card><div class=lab>Connected</div><p><b>${esc(row.device || 'Your Mac')}</b> is now linked to Print@ as <b>${esc(row.email)}</b>.</p>
+        <p class=muted>Return to your Mac — the driver will pick this up in a few seconds. From now on your print jobs dispatch through Print@: sent from a Print@ address, Print@ Network shops with pickup codes, nothing to configure locally.</p></div>`));
+    }
+    if (req.method === 'GET' && url === '/api/device/poll') {
+      const row = db.pollById(q.poll);
+      if (!row) return json(res, 404, { error: 'unknown poll' });
+      if (row.device_token) return json(res, 200, { status: 'ok', device_token: row.device_token, email: row.email });
+      if (row.expires < Date.now()) return json(res, 200, { status: 'expired' });
+      return json(res, 200, { status: 'pending' });
+    }
+    // Driver dispatches a directory job (chain/library/PrinterOn/PrintMe) THROUGH the cloud:
+    // the email is sent from printat.co, not the user's inbox, and the job is logged.
+    if (req.method === 'POST' && url === '/api/dispatch') {
+      const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      const dev = db.device(auth);
+      if (!dev) return json(res, 401, { error: 'connect this device: run "printat connect"' });
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      if (!b.to || !b.fileB64) return json(res, 400, { error: 'to and fileB64 required' });
+      const ref = 'PA-' + db.rid(4).toUpperCase();
+      try {
+        await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Replies go to ${dev.email}.`,
+          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: Buffer.from(b.fileB64, 'base64') });
+      } catch (e) { return json(res, 502, { error: 'send failed: ' + e.message }); }
+      db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref });
+      return json(res, 200, { ok: true, ref });
     }
 
     // QR image for any URL: /qr?d=<url>

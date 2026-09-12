@@ -20,6 +20,14 @@ db.exec(`
     filename TEXT, filepath TEXT, pages INTEGER, copies INTEGER, color INTEGER,
     pickup_code TEXT, group_id TEXT, status TEXT DEFAULT 'queued', rate_token TEXT, created INTEGER, printed INTEGER);
   CREATE TABLE IF NOT EXISTS ratings(id INTEGER PRIMARY KEY, shop_id INTEGER, job_id INTEGER, stars INTEGER, comment TEXT, created INTEGER);
+  -- Driver devices: a Mac running the open-source driver, linked by magic link. Lets the
+  -- driver dispatch through the cloud (branded sender) without local email setup.
+  CREATE TABLE IF NOT EXISTS devices(token TEXT PRIMARY KEY, email TEXT, name TEXT, device TEXT, created INTEGER, last_used INTEGER);
+  CREATE TABLE IF NOT EXISTS device_polls(poll TEXT PRIMARY KEY, email TEXT, name TEXT, device TEXT, magic TEXT, device_token TEXT, expires INTEGER);
+  -- Directory dispatches: jobs the driver relayed by email to a chain/library/PrinterOn/PrintMe
+  -- shop (not a Print@ Network shop). Logged so we can relay replies/codes back later.
+  CREATE TABLE IF NOT EXISTS dispatches(id INTEGER PRIMARY KEY, device_token TEXT, email TEXT, shop_name TEXT, shop_address TEXT,
+    to_email TEXT, subject TEXT, filename TEXT, ref TEXT, status TEXT DEFAULT 'sent', created INTEGER);
 `);
 try { db.exec('ALTER TABLE jobs ADD COLUMN group_id TEXT'); } catch {}
 const now = () => Date.now();
@@ -66,4 +74,25 @@ module.exports = {
   addRating(shop_id, job_id, stars, comment) { db.prepare('INSERT INTO ratings(shop_id,job_id,stars,comment,created) VALUES(?,?,?,?,?)').run(shop_id, job_id, stars, comment || '', now()); },
   shopRating: id => db.prepare('SELECT COUNT(*) n, AVG(stars) avg FROM ratings WHERE shop_id=?').get(id),
   shopReviews: id => db.prepare('SELECT stars,comment,created FROM ratings WHERE shop_id=? AND comment<>"" ORDER BY created DESC LIMIT 10').all(id),
+  // driver devices (magic-link device authorization)
+  makeDevicePoll(email, name, device, ttlMin = 15) {
+    const poll = rid(16), magic = rid(20);
+    db.prepare('INSERT INTO device_polls(poll,email,name,device,magic,device_token,expires) VALUES(?,?,?,?,?,NULL,?)')
+      .run(poll, (email || '').toLowerCase(), name || '', device || '', magic, now() + ttlMin * 60000);
+    return { poll, magic };
+  },
+  pollByMagic: m => db.prepare('SELECT * FROM device_polls WHERE magic=?').get(m || ''),
+  pollById: p => db.prepare('SELECT * FROM device_polls WHERE poll=?').get(p || ''),
+  confirmDevicePoll(magic) {
+    const row = db.prepare('SELECT * FROM device_polls WHERE magic=?').get(magic || '');
+    if (!row || row.expires < now() || row.device_token) return row && row.device_token ? row : null;
+    const tok = rid(24);
+    db.prepare('INSERT INTO devices(token,email,name,device,created,last_used) VALUES(?,?,?,?,?,?)').run(tok, row.email, row.name, row.device, now(), now());
+    db.prepare('UPDATE device_polls SET device_token=? WHERE poll=?').run(tok, row.poll);
+    return { ...row, device_token: tok };
+  },
+  device: t => { const r = db.prepare('SELECT * FROM devices WHERE token=?').get(t || ''); if (r) db.prepare('UPDATE devices SET last_used=? WHERE token=?').run(now(), t); return r; },
+  // directory dispatches (driver relayed a job by email through the cloud)
+  logDispatch(d) { const r = db.prepare(`INSERT INTO dispatches(device_token,email,shop_name,shop_address,to_email,subject,filename,ref,status,created)
+    VALUES(?,?,?,?,?,?,?,?,'sent',?)`).run(d.device_token, d.email, d.shop_name, d.shop_address, d.to_email, d.subject, d.filename, d.ref, now()); return r.lastInsertRowid; },
 };

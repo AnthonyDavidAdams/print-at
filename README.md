@@ -36,6 +36,26 @@ Print dialog ──> CUPS ──> backend/printat (POST to localhost) ──> ag
       confirm pick ──> email PDF / open upload portal / show phone      ▼
 ```
 
+## Cloud or local — the same driver, two modes
+
+Most people want the driver **plus our cloud** and nothing to run or configure. That's the
+default we recommend:
+
+```
+printat connect you@email      # magic link to your inbox, click it, done
+```
+
+Connected, the driver dispatches through [printat.co](https://printat.co): orders are sent
+from a Print@ address (no Gmail app password, no SMTP setup), **Print@ Network** shops show
+up first with a real pickup code, and the job is logged so replies and codes can come back
+to you. Everything else — locating you, searching Apple Maps, ranking with `claude -p` —
+still runs on your Mac, so the smart part stays free and private.
+
+Prefer to run everything yourself? Skip the connect step. In **local-only mode** nothing but
+the print job leaves your Mac: orders send from your own email (set `gmailEnv`/`smtpUser` in
+`config.json`). `printat disconnect` returns to this mode any time; `printat status` shows
+which mode you're in. Connecting is a default you can turn off, never a required middleman.
+
 ## Print-dialog options (under the printer-options section, not Page Setup)
 
 | Option | Choices |
@@ -98,8 +118,9 @@ notification when the order has gone out.
 - [Claude Code](https://claude.com/claude-code) CLI on your PATH. Ranking runs through
   `claude -p`, so it bills to your Claude subscription. Without it Print@ still works,
   ranked by distance only.
-- A Gmail account with an [app password](https://myaccount.google.com/apppasswords) if you
-  want Print@ to email orders. Put `GMAIL_APP_PASSWORD=...` in `~/.gmail.env`.
+- For email: either **connect to the cloud** (`printat connect`, nothing else to set up), or
+  in local-only mode a Gmail account with an [app password](https://myaccount.google.com/apppasswords)
+  in `~/.gmail.env` (`GMAIL_APP_PASSWORD=...`) so Print@ can send from your own address.
 
 ## Install
 
@@ -119,7 +140,9 @@ Then edit `~/Library/Application Support/PrintAt/config.json`:
 | `homeAddress` | used when Location Services is unavailable and your IP lands within 25 miles of it |
 | `ccSelf` | cc yourself on every order email |
 | `claudeModel` | leave blank for the CLI default |
-| `gmailEnv` | file holding `GMAIL_APP_PASSWORD` |
+| `gmailEnv` | file holding `GMAIL_APP_PASSWORD` (local-only mode) |
+| `cloudToken`, `cloudEmail` | set by `printat connect`; presence of a token means jobs dispatch through the cloud |
+| `useCloud` | `auto` (use the cloud whenever connected) or `off` (force local even if a token is present) |
 
 Uninstall with `sudo ~/printat/uninstall.sh`.
 
@@ -165,10 +188,14 @@ cheaper or closer one that only has a web upload form, and the window shows only
 automatable shops. Form-only and phone-only shops sit behind a "Show other options" button
 and are offered directly only when nothing automatable exists nearby.
 
+- **Print@ Network** (connected mode): shops that joined the network appear first. The job
+  goes straight to the shop's browser, you get a 6-digit pickup code, and you can rate the
+  shop afterward. No email round-trip.
 - **Email**: the PDF goes out with the specs and a request to confirm price and ready time,
   cc'd to you. Only addresses found on an official page are used, never guessed. The UPS
   Store's per-store `store####@theupsstore.com` pattern and PrinterOn email-to-print
-  addresses count.
+  addresses count. Connected, the email is sent from a Print@ address; local-only, from your
+  own inbox.
 - **PrinterOn**: hotel business centers, libraries and airport lounges on HP's PrinterOn
   network each have an email-to-print address. Print@ ships the whole PrinterOn public
   directory (`data/printeron-all.json`: 3,519 venues in 53 countries, 3,212 online with

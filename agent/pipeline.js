@@ -9,11 +9,19 @@ const { findCandidates } = require('./shops');
 const { rank } = require('./rank');
 const submit = require('./submit');
 const memory = require('./memory');
+const cloud = require('./cloud');
 const { createUX } = require('./panel');
 
 function money(n) { return n == null ? 'price unknown' : `est. $${Number(n).toFixed(2)}`; }
 function openText(r) { return r.open_now === true ? 'open now' : r.open_now === false ? 'closed now' : 'hours unverified'; }
 function summary(r) {
+  if (r.network) {
+    const bits = [`${r.distance_mi ?? '?'} mi`, 'Print@ Network'];
+    if (r.price_bw) bits.push(`B&W ${r.price_bw}`);
+    if (r.price_color) bits.push(`color ${r.price_color}`);
+    if (r.stars) bits.push(`${r.stars}★`);
+    return bits.join(' · ');
+  }
   const bits = [`${r.distance_mi ?? '?'} mi`, openText(r)];
   if (r.hours_today) bits.push(r.hours_today);
   bits.push(money(r.est_cost_usd));
@@ -23,6 +31,7 @@ function summary(r) {
 function methodText(r) {
   const s = r.submit || {};
   switch (s.method) {
+    case 'network': return `Sends to ${r.name} through Print@. You get a pickup code and the shop prints it from its browser.`;
     case 'email': return `Sends the PDF by email to ${s.email}`;
     case 'portal': return `Opens the upload page at ${s.url}`;
     case 'phone': return `No online ordering found. Call ${s.phone || r.phone}.`;
@@ -32,8 +41,9 @@ function methodText(r) {
 function primaryLabel(r, delivery) {
   if (delivery === 'FindOnly') return 'Use this shop';
   const m = (r.submit || {}).method;
-  return m === 'email' ? `Send to ${r.name}` : m === 'portal' ? 'Open upload page' : 'Show details';
+  return (m === 'email' || m === 'network') ? `Send to ${r.name}` : m === 'portal' ? 'Open upload page' : 'Show details';
 }
+function radiusMiles(maxDistance) { return parseInt(maxDistance, 10) || 5; }
 function forPanel(ranked, delivery) {
   return ranked.map(r => ({ id: r.id, name: r.name, address: r.address || '', summary: summary(r), why: r.why || '', method: methodText(r), primary: primaryLabel(r, delivery) }));
 }
@@ -136,10 +146,25 @@ async function run(job, cfg, report = () => {}) {
       receipt.push('', '## Ranking', ...ranked.map((r, i) => `${i + 1}. **${r.name}** — ${summary(r)} — ${r.why} — ${methodText(r)}`), '');
     }
 
+    // 3b. Print@ cloud: when connected, Print@ Network shops are the best option — the
+    //     shop prints from its browser, the customer gets a pickup code and can rate it.
+    //     Offer them ahead of directory shops.
+    if (cloud.connected(cfg) && !fromMemory) {
+      try {
+        const net = await cloud.nearbyNetworkShops(cfg, loc, radiusMiles(spec.maxDistance));
+        if (net.length) {
+          net.forEach((n, i) => { n.score = 1 - i * 0.001; n.why = `Print@ Network shop, ${n.distance_mi} mi away.`; });
+          ranked = net.concat(ranked);
+          receipt.push(`- ${net.length} Print@ Network shop(s) available via the cloud`);
+          log(`job ${job.id}: ${net.length} Print@ Network shop(s) from cloud`);
+        }
+      } catch (e) { log(`network shops lookup skipped: ${e.message}`); }
+    }
+
     // 4. Pick. Shops the agent can send to by itself come first; web forms and
     //    phone-only shops are offered only behind "Show other options", or when
     //    nothing automatable exists.
-    const isAuto = r => (r.submit || {}).method === 'email' && !!(r.submit || {}).email;
+    const isAuto = r => { const m = (r.submit || {}).method; return m === 'network' || (m === 'email' && !!(r.submit || {}).email); };
     const autoList = ranked.filter(isAuto), manualList = ranked.filter(r => !isAuto(r));
     let shortlist = autoList.length ? autoList : manualList;
     let alternates = autoList.length ? manualList : [];
@@ -182,17 +207,42 @@ async function run(job, cfg, report = () => {}) {
     }
     status(`Sending to ${pick.name}`);
     try {
-      if (s.method === 'email' && s.email) {
+      if (s.method === 'network') {
+        const items = [{ filename: path.basename(job.pdf), fileB64: fs.readFileSync(job.pdf).toString('base64'), copies: spec.copies, color: spec.color ? 'color' : 'bw' }];
+        const out = await cloud.sendNetworkJob(cfg, { networkId: s.network_id, items, name: cfg.contactName, email: cfg.contactEmail });
+        receipt.push(`Sent through Print@ Network. Pickup code: ${out.pickup_code}.`);
+        job.result = { status: 'sent', shop: pick.name, method: 'network', pickup_code: out.pickup_code };
+        memory.remember(loc, spec, pick);
+        ui.notify(`Sent to ${pick.name}. Pickup code ${out.pickup_code}.`, 'Sent via Print@');
+        if (ux) {
+          const added = autoAddPrinter(pick, spec, receipt);
+          const act = await ux.result(`Sent to ${pick.name} through Print@ Network.\n\nPickup code: ${out.pickup_code}\nShow it at the counter. ${cfg.contactEmail ? `A copy went to ${cfg.contactEmail}.` : ''}\n${pick.address}${added}`, [{ key: 'maps', label: 'Open in Maps' }, { key: 'done', label: 'Done' }]);
+          if (act === 'maps') submit.openMaps(pick);
+        }
+      } else if (s.method === 'email' && s.email) {
         const isPrinterOn = !!pick.printeron || /@printspots\.com$/i.test(s.email);
         const isPrintMe = !!pick.printme || /@printme\.com$/i.test(s.email || '');
         const releaseStyle = isPrinterOn || isPrintMe;
         const subject = releaseStyle ? job.title : (pick.email_subject || `Print order: ${job.title} (${spec.pages || '?'} pp x ${spec.copies}, ${spec.color ? 'color' : 'B&W'})`);
         const body = releaseStyle ? 'Print the attached document.' : pick.email_body || `Hello,\n\nPlease print the attached PDF: ${spec.pages || '?'} pages, ${spec.copies} copies, ${spec.color ? 'full color' : 'black and white'}, ${spec.duplex ? 'two-sided' : 'single-sided'}, ${spec.paperStock} paper, ${spec.binding}. Needed ${spec.pickup}.\n\nPlease reply with the price and when it will be ready. Pickup name: ${cfg.contactName}${cfg.contactPhone ? ', ' + cfg.contactPhone : ''}.\n\nThanks,\n${cfg.contactName}`;
-        const out = submit.sendEmail({ to: s.email, cc: cfg.ccSelf ? cfg.contactEmail : '', subject, body, attachment: job.pdf, cfg });
+        const cc = cfg.ccSelf ? cfg.contactEmail : '';
+        // Connected → dispatch through printat.co (branded sender, logged). Fall back to
+        // local email if the cloud is unreachable and local email is configured.
+        let out, viaCloud = false;
+        if (cloud.connected(cfg)) {
+          try {
+            const r = await cloud.dispatchEmail(cfg, { to: s.email, cc, subject, body, pdfPath: job.pdf, shop: pick, meta: { pages: spec.pages, copies: spec.copies, color: spec.color } });
+            out = `Print@ cloud (ref ${r.ref})`; viaCloud = true;
+          } catch (e) {
+            log(`cloud dispatch failed (${e.message}); ${cfg.smtpUser ? 'falling back to local email' : 'no local email configured'}`);
+            if (!cfg.smtpUser) throw e;
+          }
+        }
+        if (!viaCloud) out = submit.sendEmail({ to: s.email, cc, subject, body, attachment: job.pdf, cfg });
         receipt.push(`Sent: ${out}`, '', '### Email', `Subject: ${subject}`, '', body);
-        job.result = { status: 'sent', shop: pick.name, method: 'email', to: s.email };
+        job.result = { status: 'sent', shop: pick.name, method: 'email', to: s.email, via: viaCloud ? 'cloud' : 'local' };
         memory.remember(loc, spec, pick);
-        ui.notify(releaseStyle ? `Sent to ${pick.name} via ${isPrintMe ? 'PrintMe' : 'PrinterOn'}. Watch your email for the release code.` : `Order emailed to ${pick.name}. They will reply with price and pickup time.`, 'Sent');
+        ui.notify(releaseStyle ? `Sent to ${pick.name} via ${isPrintMe ? 'PrintMe' : 'PrinterOn'}. Watch your email for the release code.` : `Order emailed to ${pick.name}${viaCloud ? ' via Print@' : ''}. They will reply with price and pickup time.`, 'Sent');
         if (ux) {
           const added = autoAddPrinter(pick, spec, receipt);
           const text = isPrintMe
