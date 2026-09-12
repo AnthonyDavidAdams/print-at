@@ -57,7 +57,15 @@ launchctl bootstrap "gui/$REAL_UID" "$PLIST"
 sleep 1
 if curl -sf "http://127.0.0.1:4243/health" >/dev/null; then echo "    agent is up"; else echo "    agent did not answer on :4243 — check ~/Library/Logs/PrintAt/"; fi
 
+echo "==> Installing 'printat' command"
+ln -sf "$ROOT/bin/printat" /usr/local/bin/printat 2>/dev/null && echo "    /usr/local/bin/printat -> repo" || echo "    (could not symlink; run $ROOT/bin/printat directly)"
+
 echo
 echo "Done. 'Print@ Nearby' is now a printer in every Print dialog. 'Print@ Console' is in ~/Applications."
 echo "Options live under the printer-options section of the Print dialog (Priority, radius, shop type, delivery)."
 echo "Test from a terminal:  lp -d PrintAt -o Priority=Price -o Delivery=Confirm some.pdf"
+echo
+echo "Recommended: connect to the Print@ cloud so jobs dispatch through the network"
+echo "(branded sender, Print@ Network shops, pickup codes — no local email setup):"
+echo "    printat connect $([ -n "${SUDO_USER:-}" ] && sudo -u "$REAL_USER" echo your@email || echo your@email)"
+echo "Skip it to stay fully local (jobs send from your own email; set gmailEnv/smtpUser in config.json)."

@@ -15,7 +15,18 @@ automatically. (`.com` is taken; `.co` is the product domain.)
   `CNAME  @  ->  <the railway target>`  (proxy OFF / DNS-only so Railway can issue the cert)
 - Set the runtime base so QR/email links use the domain:
   `railway variables --service print-at-network --set PRINTAT_NET_BASE=https://printat.co`
+- Branded sender for cloud dispatch + device links (so connected drivers send from Print@,
+  not a personal Gmail): `PRINTAT_FROM=print@printat.co PRINTAT_FROM_NAME="Print@"`. The
+  Gmail-API creds (`GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN`) already power sending; switch to
+  Resend once printat.co is DNS-verified for a real branded from-address + inbound replies.
 - Railway issues the cert; live at https://printat.co in a few minutes.
+
+## The driver connects here
+Connected drivers hit this same service: `POST /api/device/start` + `/device/confirm` +
+`/api/device/poll` (magic-link device auth) and `POST /api/dispatch` (relays a directory
+job's PDF from the Print@ address). Nothing extra to deploy — they ship with the network
+server. The driver points at `https://printat.co` by default (`cloudBase`, override with
+`PRINTAT_CLOUD_BASE`).
 
 ## 3. Persistence
 Add a volume mounted at `/data` on the Railway service (dashboard → service → Volumes)
