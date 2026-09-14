@@ -1,0 +1,7 @@
+{
+  "name": "print-at-network",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node network/server.js" }
+}
