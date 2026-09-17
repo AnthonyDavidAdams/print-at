@@ -246,6 +246,10 @@ Ideas that would make this much better, in rough order:
 
 PRs welcome. Keep the agent dependency-free (Node built-ins only).
 
+## About
+
+Made by Anthony David Adams at [EarthPilot.ai Lab](https://earthpilot.ai). Come build with us at the [Singularity Playground](https://earthpilot.ai/playground), free and weekly on Zoom.
+
 ## License
 
 MIT
