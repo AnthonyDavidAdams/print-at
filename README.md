@@ -169,7 +169,7 @@ diagnostics (versions, settings without keys, the last log lines, the last recei
 known problems get the fix back by email immediately, the rest reach a person. The same form is in
 the console (http://127.0.0.1:4243/) and at https://printat.co/help, which also answers questions.
 
-The driver checks for updates daily and tells you (notification + console banner). To update:
+The driver checks for updates daily and tells you (notification + console banner). Click **Update now** in the banner and the driver pulls the new version and restarts itself; if the update touches the printer backend it opens Terminal for the one password prompt. Or from Terminal:
 
 ```
 printat update
