@@ -37,7 +37,9 @@ function norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 // Places MapKit returns for "print" queries that cannot print a document.
 const NOISE = /access point|ship center|shipping center|drop ?box|customer center|fedex ground|fedex freight|amazon (hub|locker)|copier|toner|ink refill|3d print|screen print|t-?shirt|apparel|embroider/i;
 
-async function findCandidates(loc, shopType, maxDistance, pin = '') {
+const directory = require('./directory');
+async function findCandidates(loc, shopType, maxDistance, pin = '', cfg = null) {
+  if (cfg) await directory.refresh(cfg);
   // A pinned queue ("Print at Eureka Staples") searches for that shop only and widens
   // the radius if it is not inside the chosen one.
   if (pin) {

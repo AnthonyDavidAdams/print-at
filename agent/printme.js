@@ -6,8 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { log } = require('./config');
 
-const DIR_US = path.join(__dirname, '..', 'data', 'printme-us.json');
-const DIR_WORLD = path.join(__dirname, '..', 'data', 'printme-world.json');
+const directory = require('./directory');
 
 // Verified central email-to-print addresses (send here, release at any of that brand's kiosks).
 const EMAILS = {
@@ -22,13 +21,12 @@ function emailFor(merchant) {
   return GENERIC;
 }
 
-let DIR = null;
+let DIR = null, DIRSRC = null;
 function load() {
-  if (DIR !== null) return DIR;
-  for (const f of [DIR_WORLD, DIR_US]) {
-    try { DIR = JSON.parse(fs.readFileSync(f, 'utf8')).locations || []; return DIR; } catch {}
-  }
-  DIR = [];
+  const data = directory.read('printme-us');
+  if (!data) { DIR = []; DIRSRC = null; return DIR; }
+  if (DIR !== null && DIRSRC === data) return DIR;
+  DIR = data.locations || []; DIRSRC = data;
   return DIR;
 }
 

@@ -1,3 +1,4 @@
+# railway up uses this instead of .gitignore so network/directory/ (untracked) still uploads
 helper/printat-locate
 helper/*.o
 .DS_Store
@@ -12,16 +13,10 @@ helper/console/PrintAtConsole
 helper/console/Print@ Console.app/
 helper/console/_CodeSignature/
 data/.printeron-*.progress.json
-
-# Maintainer-only directory scanners (not shipped)
 maintainer/
-
 data/.printeron-*.status.json
-
-# The public-printer directory is served by printat.co to connected drivers, not shipped.
 data/printeron-*.json
 data/printme-*.json
 data/library-print.json
-network/directory/
 network/email-worker/node_modules/
 network/email-worker/.wrangler/

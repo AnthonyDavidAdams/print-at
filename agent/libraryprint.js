@@ -7,13 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const { log } = require('./config');
 
-const FILE = path.join(__dirname, '..', 'data', 'library-print.json');
-let DB = null;
-function load() {
-  if (DB) return DB;
-  try { DB = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { DB = { libraries: [] }; }
-  return DB;
-}
+const directory = require('./directory');
+function load() { return directory.read('library-print') || { libraries: [] }; }
 const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // ewprints addresses for a stem: bw + color (documented suffix pattern).

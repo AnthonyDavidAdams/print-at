@@ -121,7 +121,7 @@ async function run(job, cfg, report = () => {}) {
     // 3. Otherwise search and rank
     if (!ranked) {
       status(`Searching within ${spec.maxDistance} of ${loc.address}`);
-      const candidates = await findCandidates(loc, spec.shopType, spec.maxDistance, job.pin);
+      const candidates = await findCandidates(loc, spec.shopType, spec.maxDistance, job.pin, cfg);
       check();
       log(`job ${job.id}: ${candidates.length} candidates`);
       if (!candidates.length) {

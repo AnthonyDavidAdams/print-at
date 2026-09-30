@@ -1,0 +1,8 @@
+name = "printat-inbound"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+# Bound to printat.co's Email Routing catch-all. Set INBOUND_SECRET with:
+#   npx wrangler secret put INBOUND_SECRET
+[vars]
+INBOUND_URL = "https://printat.co/api/inbound"
+FALLBACK_TO = "anthony@175g.com"

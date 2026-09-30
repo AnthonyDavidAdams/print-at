@@ -116,10 +116,15 @@ function customerPage(preShop) {
   </script>`.replace('%PRESHOP%', preShop ? JSON.stringify({id:preShop.id,name:preShop.name,address:preShop.address}) : 'null'));
 }
 
+const MAIL_DOMAIN = process.env.PRINTAT_MAIL_DOMAIN || new URL(BASE).hostname.replace(/^www\./, '');
+const INBOUND_SECRET = process.env.INBOUND_SECRET || '';
+const FALLBACK_INBOX = process.env.PRINTAT_INBOX || '';
+const replyAddr = (kind, ref) => `${kind}-${String(ref).toLowerCase()}@${MAIL_DOMAIN}`;
 function jobListing(items) { return items.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n'); }
 function notifyShop(shop, jobs, customerName) {
   mail(shop.email, `New print job (${jobs.length} file${jobs.length > 1 ? 's' : ''}) — pickup ${jobs[0].pickup_code}`,
-    `${customerName || 'A customer'} sent ${jobs.length} file${jobs.length > 1 ? 's' : ''} to ${shop.name}:\n${jobListing(jobs)}\n\nOpen your queue to print: ${BASE}/shop/dashboard\n\nPickup code: ${jobs[0].pickup_code}`);
+    `${customerName || 'A customer'} sent ${jobs.length} file${jobs.length > 1 ? 's' : ''} to ${shop.name}:\n${jobListing(jobs)}\n\nOpen your queue to print: ${BASE}/shop/dashboard\n\nPickup code: ${jobs[0].pickup_code}\n\nReply to this email to message the customer.`,
+    replyAddr('order', jobs[0].pickup_code));
 }
 
 const server = http.createServer(async (req, res) => {
@@ -232,11 +237,47 @@ const server = http.createServer(async (req, res) => {
       if (!b.to || !b.fileB64) return json(res, 400, { error: 'to and fileB64 required' });
       const ref = 'PA-' + db.rid(4).toUpperCase();
       try {
-        await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Replies go to ${dev.email}.`,
-          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: Buffer.from(b.fileB64, 'base64') }, dev.email);
+        await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Just reply to this email and it reaches them.`,
+          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: Buffer.from(b.fileB64, 'base64') }, replyAddr('job', ref));
       } catch (e) { return json(res, 502, { error: 'send failed: ' + e.message }); }
       db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref });
       return json(res, 200, { ok: true, ref });
+    }
+
+    // The public-printer directory, for connected drivers only (this is the asset).
+    if (req.method === 'GET' && url.startsWith('/api/directory/')) {
+      const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!db.device(auth)) return json(res, 401, { error: 'connect this device: run "printat connect"' });
+      const name = url.slice('/api/directory/'.length).replace(/[^a-z0-9-]/g, '');
+      const file = path.join(__dirname, 'directory', name + '.json');
+      if (!name || !fs.existsSync(file)) return json(res, 404, { error: 'no such directory file' });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', 'Last-Modified': fs.statSync(file).mtime.toUTCString() });
+      return res.end(fs.readFileSync(file));
+    }
+
+    // Inbound mail from the Email Worker: job-<ref>@ (a driver's relayed order) or
+    // order-<code>@ (a Print@ Network job). Relay to whichever side didn't write it.
+    if (req.method === 'POST' && url === '/api/inbound') {
+      if (!INBOUND_SECRET || req.headers['x-printat-inbound'] !== INBOUND_SECRET) return json(res, 401, { error: 'bad secret' });
+      const m = JSON.parse((await body(req)).toString() || '{}');
+      const local = String(m.to || '').split('@')[0].toLowerCase();
+      const from = String(m.from || '').toLowerCase();
+      const who = m.fromName ? `${m.fromName} <${m.from}>` : m.from;
+      const text = (m.text || String(m.html || '').replace(/<[^>]+>/g, ' ')).trim();
+      const kind = local.split('-')[0], ref = local.slice(kind.length + 1);
+      let customer = '', shop = '', shopName = '';
+      if (kind === 'job') { const d = db.dispatchByRef(ref); if (d) { customer = d.email; shop = d.to_email; shopName = d.shop_name || d.to_email; db.setDispatchStatus(d.ref, 'replied'); } }
+      else if (kind === 'order') { const j = db.jobsByCode(ref)[0]; if (j) { const s = db.shopById(j.shop_id); customer = j.customer_email; shop = s ? s.email : ''; shopName = s ? s.name : ''; } }
+      const fromCustomer = customer && from === customer.toLowerCase();
+      const dest = fromCustomer ? shop : customer;
+      db.logReply({ kind, ref, from_email: m.from, to_email: m.to, forwarded_to: dest || FALLBACK_INBOX, subject: m.subject, text });
+      if (!dest) {
+        if (FALLBACK_INBOX) mail(FALLBACK_INBOX, `[Print@ unmatched] ${m.subject || '(no subject)'}`, `To: ${m.to}\nFrom: ${who}\n\n${text}`);
+        return json(res, 200, { relayed: false });
+      }
+      const intro = fromCustomer ? `${who} (the customer) replied about print order ${ref.toUpperCase()}:` : `${shopName || who} replied about your print order ${ref.toUpperCase()}:`;
+      await mail(dest, `Re: ${(m.subject || 'Print order ' + ref.toUpperCase()).replace(/^(re:\s*)+/i, '')}`, `${intro}\n\n${text}\n\n— Relayed by Print@. Reply to this email to answer.`, m.to);
+      return json(res, 200, { relayed: true, to: fromCustomer ? 'shop' : 'customer' });
     }
 
     // QR image for any URL: /qr?d=<url>

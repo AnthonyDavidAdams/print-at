@@ -26,6 +26,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS device_polls(poll TEXT PRIMARY KEY, email TEXT, name TEXT, device TEXT, magic TEXT, device_token TEXT, expires INTEGER);
   -- Directory dispatches: jobs the driver relayed by email to a chain/library/PrinterOn/PrintMe
   -- shop (not a Print@ Network shop). Logged so we can relay replies/codes back later.
+  CREATE TABLE IF NOT EXISTS replies(id INTEGER PRIMARY KEY, kind TEXT, ref TEXT, from_email TEXT, to_email TEXT, forwarded_to TEXT, subject TEXT, text TEXT, created INTEGER);
   CREATE TABLE IF NOT EXISTS dispatches(id INTEGER PRIMARY KEY, device_token TEXT, email TEXT, shop_name TEXT, shop_address TEXT,
     to_email TEXT, subject TEXT, filename TEXT, ref TEXT, status TEXT DEFAULT 'sent', created INTEGER);
 `);
@@ -96,6 +97,10 @@ module.exports = {
   },
   device: t => { const r = db.prepare('SELECT * FROM devices WHERE token=?').get(t || ''); if (r) db.prepare('UPDATE devices SET last_used=? WHERE token=?').run(now(), t); return r; },
   // directory dispatches (driver relayed a job by email through the cloud)
+  dispatchByRef: r => db.prepare('SELECT * FROM dispatches WHERE ref=? ORDER BY id DESC').get(String(r || '').toUpperCase()),
+  setDispatchStatus(ref, status) { db.prepare('UPDATE dispatches SET status=? WHERE ref=?').run(status, ref); },
+  logReply(r) { db.prepare('INSERT INTO replies(kind,ref,from_email,to_email,forwarded_to,subject,text,created) VALUES(?,?,?,?,?,?,?,?)').run(r.kind, r.ref, r.from_email, r.to_email, r.forwarded_to || '', r.subject || '', (r.text || '').slice(0, 20000), now()); },
+  repliesFor: (kind, ref) => db.prepare('SELECT * FROM replies WHERE kind=? AND ref=? ORDER BY id').all(kind, ref),
   logDispatch(d) { const r = db.prepare(`INSERT INTO dispatches(device_token,email,shop_name,shop_address,to_email,subject,filename,ref,status,created)
     VALUES(?,?,?,?,?,?,?,?,'sent',?)`).run(d.device_token, d.email, d.shop_name, d.shop_address, d.to_email, d.subject, d.filename, d.ref, now()); return r.lastInsertRowid; },
 };

@@ -93,8 +93,8 @@ async function resendSend(to, cc, subject, text, att, replyTo) {
   return true;
 }
 
-module.exports = function send(to, subject, text) {
-  if (RESEND) return resendSend(to, '', subject, text, null, '').catch(e => { console.error('mail(resend):', e.message); return false; });
+module.exports = function send(to, subject, text, replyTo) {
+  if (RESEND) return resendSend(to, '', subject, text, null, replyTo || '').catch(e => { console.error('mail(resend):', e.message); return false; });
   if (process.env.GOOGLE_REFRESH_TOKEN) {
     return gmailApi(to, subject, text).catch(e => { console.error('mail(gmail):', e.message); return false; });
   }

@@ -9,8 +9,7 @@ const { APP_DIR, log } = require('./config');
 const { geocode } = require('./locate');
 
 const CACHE = path.join(APP_DIR, 'printeron.json');
-const DIR_ALL = path.join(__dirname, '..', 'data', 'printeron-all.json');
-const DIR_US = path.join(__dirname, '..', 'data', 'printeron-us.json');
+const directory = require('./directory');
 const BASE = 'https://www.printeron.net';
 const UA = 'Mozilla/5.0 (Macintosh) Print@';
 const TTL = 7 * 86400e3;
@@ -101,15 +100,14 @@ function miles(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-// The bundled directory (data/printeron-us.json) already has every US printer with its
+// The cloud-served directory already has every printer with its
 // email and color, so when it is present we filter it by distance and skip scraping.
-let DIR = null;
+let DIR = null, DIRSRC = null;
 function loadDirectory() {
-  if (DIR !== null) return DIR;
-  for (const f of [DIR_ALL, DIR_US]) {
-    try { const all = JSON.parse(fs.readFileSync(f, 'utf8')).printers || []; DIR = all.filter(p => p.alias); return DIR; } catch {}
-  }
-  DIR = [];
+  const data = directory.read('printeron-all') || directory.read('printeron-us');
+  if (!data) { DIR = []; DIRSRC = null; return DIR; }
+  if (DIR !== null && DIRSRC === data) return DIR;
+  DIR = (data.printers || []).filter(p => p.alias); DIRSRC = data;
   return DIR;
 }
 
