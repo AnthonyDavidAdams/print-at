@@ -21,6 +21,10 @@ const DEFAULTS = {
   port: 4243,
   claudeModel: '',
   claudeTimeoutSec: 540,
+  // Local-mode sender: 'mailapp' (default; sends through Mail.app with whatever account
+  // is set up there, no credentials) or 'smtp' (send_email.py + gmailEnv/smtpUser).
+  sender: 'mailapp',
+  mailAccount: '', // Mail.app account to send from, e.g. "Jane <jane@icloud.com>"; blank = Mail's default
   gmailEnv: path.join(os.homedir(), '.gmail.env'),
   smtpUser: '',
   smtpHost: 'smtp.gmail.com',

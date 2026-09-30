@@ -42,6 +42,8 @@ if [ ! -f "$APP/config.json" ]; then
   "port": 4243,
   "claudeModel": "",
   "claudeTimeoutSec": 540,
+  "sender": "mailapp",
+  "mailAccount": "",
   "gmailEnv": "$REAL_HOME/.gmail.env",
   "smtpUser": ""
 }
@@ -68,4 +70,4 @@ echo
 echo "Recommended: connect to the Print@ cloud so jobs dispatch through the network"
 echo "(branded sender, Print@ Network shops, pickup codes — no local email setup):"
 echo "    printat connect $([ -n "${SUDO_USER:-}" ] && sudo -u "$REAL_USER" echo your@email || echo your@email)"
-echo "Skip it to stay fully local (jobs send from your own email; set gmailEnv/smtpUser in config.json)."
+echo "Skip it to stay fully local: orders go out through Mail.app from whatever account you already use there."

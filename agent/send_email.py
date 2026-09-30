@@ -6,6 +6,7 @@ from email.message import EmailMessage
 p = argparse.ArgumentParser()
 p.add_argument('--to', required=True)
 p.add_argument('--cc', default='')
+p.add_argument('--reply-to', dest='reply_to', default='')
 p.add_argument('--subject', required=True)
 p.add_argument('--body-file', required=True)
 p.add_argument('--attach', required=True)
@@ -31,6 +32,8 @@ msg['To'] = a.to
 if a.cc:
     msg['Cc'] = a.cc
 msg['Subject'] = a.subject
+if a.reply_to:
+    msg['Reply-To'] = a.reply_to
 msg.set_content(open(a.body_file, encoding='utf-8').read())
 if a.attach and a.attach != '/dev/null' and os.path.exists(a.attach) and os.path.getsize(a.attach) > 0:
     with open(a.attach, 'rb') as f:

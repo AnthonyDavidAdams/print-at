@@ -60,15 +60,18 @@ module.exports = {
     const pc = code(), rt = rid(12), gid = rid(8); let firstId = null;
     for (const it of items) {
       const r = db.prepare(`INSERT INTO jobs(shop_id,customer_name,customer_email,filename,filepath,pages,copies,color,pickup_code,group_id,rate_token,status,created)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,'queued',?)`).run(base.shop_id, base.customer_name, base.customer_email, it.filename, it.filepath, it.pages || 0, it.copies || 1, it.color ? 1 : 0, pc, gid, rt, now());
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(base.shop_id, base.customer_name, base.customer_email, it.filename, it.filepath, it.pages || 0, it.copies || 1, it.color ? 1 : 0, pc, gid, rt, base.status || 'queued', now());
       if (firstId == null) firstId = r.lastInsertRowid;
     }
     return { id: firstId, pickup_code: pc, rate_token: rt, group_id: gid };
   },
-  jobsForShop: id => db.prepare("SELECT * FROM jobs WHERE shop_id=? ORDER BY created DESC LIMIT 100").all(id),
+  // 'pending' = customer hasn't confirmed their email yet; shops never see those.
+  jobsForShop: id => db.prepare("SELECT * FROM jobs WHERE shop_id=? AND status!='pending' ORDER BY created DESC LIMIT 100").all(id),
+  jobsByGroup: gid => db.prepare('SELECT * FROM jobs WHERE group_id=? ORDER BY id').all(gid || ''),
+  releaseGroup(gid) { db.prepare("UPDATE jobs SET status='queued' WHERE group_id=? AND status='pending'").run(gid); return this.jobsByGroup(gid); },
   jobById: id => db.prepare('SELECT * FROM jobs WHERE id=?').get(id),
   jobByRateToken: t => db.prepare('SELECT * FROM jobs WHERE rate_token=?').get(t || ''),
-  jobsByCode: c => db.prepare('SELECT * FROM jobs WHERE pickup_code=? ORDER BY id').all(String(c || '').trim()),
+  jobsByCode: c => db.prepare("SELECT * FROM jobs WHERE pickup_code=? AND status!='pending' ORDER BY id").all(String(c || '').trim()),
   setJobStatus(id, status) { db.prepare('UPDATE jobs SET status=?, printed=? WHERE id=?').run(status, status === 'printed' || status === 'done' ? now() : null, id); },
   // ratings
   addRating(shop_id, job_id, stars, comment) { db.prepare('INSERT INTO ratings(shop_id,job_id,stars,comment,created) VALUES(?,?,?,?,?)').run(shop_id, job_id, stars, comment || '', now()); },

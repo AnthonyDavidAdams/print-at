@@ -4,7 +4,12 @@ const path = require('path');
 const fs = require('fs');
 const { log } = require('./config');
 
+// Local-mode email. Default is Mail.app (any account the user already has, no credentials);
+// `sender: "smtp"` uses send_email.py with an app password instead.
 function sendEmail({ to, cc, subject, body, attachment, cfg }) {
+  if ((cfg.sender || 'mailapp') !== 'smtp') {
+    return require('./mailapp').send({ to, cc, subject, body, attachment, from: cfg.mailAccount || '', draft: !!cfg.dryRun });
+  }
   const bodyFile = attachment + '.email.txt';
   fs.writeFileSync(bodyFile, body);
   const args = [path.join(__dirname, 'send_email.py'), '--to', to, '--subject', subject, '--body-file', bodyFile,

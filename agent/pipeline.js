@@ -234,8 +234,9 @@ async function run(job, cfg, report = () => {}) {
             const r = await cloud.dispatchEmail(cfg, { to: s.email, cc, subject, body, pdfPath: job.pdf, shop: pick, meta: { pages: spec.pages, copies: spec.copies, color: spec.color } });
             out = `Print@ cloud (ref ${r.ref})`; viaCloud = true;
           } catch (e) {
-            log(`cloud dispatch failed (${e.message}); ${cfg.smtpUser ? 'falling back to local email' : 'no local email configured'}`);
-            if (!cfg.smtpUser) throw e;
+            const localOk = (cfg.sender || 'mailapp') !== 'smtp' || !!cfg.smtpUser;
+            log(`cloud dispatch failed (${e.message}); ${localOk ? 'falling back to local email' : 'no local email configured'}`);
+            if (!localOk) throw e;
           }
         }
         if (!viaCloud) out = submit.sendEmail({ to: s.email, cc, subject, body, attachment: job.pdf, cfg });

@@ -36,7 +36,7 @@ function smtp(to, subject, text) {
 }
 
 // Attachment-capable send (multipart/mixed) — used to relay a driver's PDF to a shop.
-async function gmailApiAttach(to, cc, subject, text, att) {
+async function gmailApiAttach(to, cc, subject, text, att, replyTo) {
   const tok = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET,
@@ -47,6 +47,7 @@ async function gmailApiAttach(to, cc, subject, text, att) {
   const b64 = att.buffer.toString('base64').replace(/(.{76})/g, '$1\r\n');
   const head = [`From: ${FROM_NAME} <${FROM}>`, `To: ${to}`];
   if (cc) head.push(`Cc: ${cc}`);
+  if (replyTo) head.push(`Reply-To: ${replyTo}`);
   head.push(`Subject: ${subject}`, 'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${bound}"`, '');
   const mime = head.join('\r\n') + '\r\n' + [
     `--${bound}`, 'Content-Type: text/plain; charset=UTF-8', '', text, '',
@@ -63,13 +64,14 @@ async function gmailApiAttach(to, cc, subject, text, att) {
   return true;
 }
 
-function smtpAttach(to, cc, subject, text, att) {
+function smtpAttach(to, cc, subject, text, att, replyTo) {
   const fs = require('fs');
   const bf = path.join(os.tmpdir(), 'netmail-' + Date.now() + '.txt'); fs.writeFileSync(bf, text);
   const af = path.join(os.tmpdir(), 'netmail-' + Date.now() + '-' + att.filename.replace(/[^\w.]+/g, '_')); fs.writeFileSync(af, att.buffer);
   const args = [path.join(__dirname, '..', 'agent', 'send_email.py'), '--to', to, '--subject', subject, '--body-file', bf,
     '--attach', af, '--from', FROM, '--from-name', FROM_NAME, '--env', process.env.GMAIL_ENV || path.join(os.homedir(), '.gmail.env')];
   if (cc) args.push('--cc', cc);
+  if (replyTo) args.push('--reply-to', replyTo);
   const r = spawnSync('python3', args, { encoding: 'utf8', timeout: 90000 });
   try { fs.unlinkSync(bf); fs.unlinkSync(af); } catch {}
   return r.status === 0;
@@ -81,8 +83,8 @@ module.exports = function send(to, subject, text) {
   }
   try { return smtp(to, subject, text); } catch (e) { console.error('mail(smtp):', e.message); return false; }
 };
-module.exports.withAttachment = function sendAttach(to, cc, subject, text, att) {
-  if (process.env.GOOGLE_REFRESH_TOKEN) return gmailApiAttach(to, cc, subject, text, att);
-  return Promise.resolve().then(() => { if (!smtpAttach(to, cc, subject, text, att)) throw new Error('smtp send failed'); return true; });
+module.exports.withAttachment = function sendAttach(to, cc, subject, text, att, replyTo) {
+  if (process.env.GOOGLE_REFRESH_TOKEN) return gmailApiAttach(to, cc, subject, text, att, replyTo);
+  return Promise.resolve().then(() => { if (!smtpAttach(to, cc, subject, text, att, replyTo)) throw new Error('smtp send failed'); return true; });
 };
 module.exports.FROM = FROM;

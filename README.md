@@ -52,8 +52,9 @@ to you. Everything else — locating you, searching Apple Maps, ranking with `cl
 still runs on your Mac, so the smart part stays free and private.
 
 Prefer to run everything yourself? Skip the connect step. In **local-only mode** nothing but
-the print job leaves your Mac: orders send from your own email (set `gmailEnv`/`smtpUser` in
-`config.json`). `printat disconnect` returns to this mode any time; `printat status` shows
+the print job leaves your Mac: orders go out through **Mail.app** from whatever account you
+already have there (Gmail, iCloud, Outlook, Fastmail, work mail), so there are no passwords
+to set up. Prefer raw SMTP? Set `sender: "smtp"` plus `gmailEnv`/`smtpUser` in `config.json`. `printat disconnect` returns to this mode any time; `printat status` shows
 which mode you're in. Connecting is a default you can turn off, never a required middleman.
 
 ## Print-dialog options (under the printer-options section, not Page Setup)
@@ -148,7 +149,9 @@ Then edit `~/Library/Application Support/PrintAt/config.json`:
 | `homeAddress` | used when Location Services is unavailable and your IP lands within 25 miles of it |
 | `ccSelf` | cc yourself on every order email |
 | `claudeModel` | leave blank for the CLI default |
-| `gmailEnv` | file holding `GMAIL_APP_PASSWORD` (local-only mode) |
+| `sender` | local-only mode: `mailapp` (default, sends via Mail.app, no credentials) or `smtp` |
+| `mailAccount` | Mail.app account to send from, e.g. `Jane <jane@icloud.com>`; blank = Mail's default |
+| `gmailEnv` | file holding `GMAIL_APP_PASSWORD` (only when `sender` is `smtp`) |
 | `cloudToken`, `cloudEmail` | set by `printat connect`; presence of a token means jobs dispatch through the cloud |
 | `useCloud` | `auto` (use the cloud whenever connected) or `off` (force local even if a token is present) |
 

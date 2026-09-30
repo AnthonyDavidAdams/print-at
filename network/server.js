@@ -67,7 +67,7 @@ function customerPage(preShop) {
     <label>Add PDFs or photos (you can pick several)<input type=file id=file accept="application/pdf,image/*" multiple></label>
     <div id=items></div>
     <label>Your name<input id=cname placeholder="For the pickup"></label>
-    <label>Your email<input id=cemail inputmode=email placeholder="you@example.com"></label>
+    <label>Your email (we confirm it, then send your pickup code there)<input id=cemail inputmode=email placeholder="you@example.com" required></label>
     <button class=btn id=find>Find shops near me</button><div class=muted id=note style=margin-top:8px></div></div>
   <div class=card id=shops style=display:none><div class=lab>2 · Pick a shop</div><div id=list></div></div>
   <div class=card id=send style=display:none><div class=lab>3 · Send</div><div id=pick></div><button class=btn red id=go>Send to shop</button><div id=result></div></div>
@@ -110,9 +110,16 @@ function customerPage(preShop) {
     find.textContent='Choose files, then send'; find.onclick=()=>{if(!items.length)return alert('Add a file');send.scrollIntoView({behavior:'smooth'})};}
   go.onclick=()=>{if(!pick)return;result.innerHTML='Sending…';
     fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,name:cname.value,email:cemail.value,items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
-      if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent '+d.count+' file'+(d.count>1?'s':'')+' to '+pick.name+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
+      if(d.pending)result.innerHTML='<div class=job style=background:#fff7e0><b>Check your email.</b><br>We sent a confirmation link to <b>'+d.email+'</b>. Tap it to release your '+d.count+' file'+(d.count>1?'s':'')+' to '+pick.name+' — your pickup code appears right after. (Look in spam if it is not there in a minute.)</div>';
+      else if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent '+d.count+' file'+(d.count>1?'s':'')+' to '+pick.name+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
       else result.innerHTML='Error: '+(d.error||'failed')})};
   </script>`.replace('%PRESHOP%', preShop ? JSON.stringify({id:preShop.id,name:preShop.name,address:preShop.address}) : 'null'));
+}
+
+function jobListing(items) { return items.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n'); }
+function notifyShop(shop, jobs, customerName) {
+  mail(shop.email, `New print job (${jobs.length} file${jobs.length > 1 ? 's' : ''}) — pickup ${jobs[0].pickup_code}`,
+    `${customerName || 'A customer'} sent ${jobs.length} file${jobs.length > 1 ? 's' : ''} to ${shop.name}:\n${jobListing(jobs)}\n\nOpen your queue to print: ${BASE}/shop/dashboard\n\nPickup code: ${jobs[0].pickup_code}`);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -157,6 +164,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/send') {
       const b = JSON.parse((await body(req)).toString() || '{}');
       const shop = db.shopById(Number(b.shop_id)); if (!shop) return json(res, 404, { error: 'shop not found' });
+      const email = String(b.email || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, 400, { error: 'a valid email is required — we send your pickup code there' });
       const items = (b.items && b.items.length) ? b.items : [{ filename: b.filename, fileB64: b.fileB64, copies: b.copies, color: b.color }];
       const saved = [];
       for (const it of items) {
@@ -166,10 +175,27 @@ const server = http.createServer(async (req, res) => {
         saved.push({ filename: it.filename, filepath: fp, copies: Number(it.copies) || 1, color: it.color === 'color' });
       }
       if (!saved.length) return json(res, 400, { error: 'no files' });
-      const job = db.createJobGroup({ shop_id: shop.id, customer_name: b.name, customer_email: b.email }, saved);
-      const listing = saved.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n');
-      mail(shop.email, `New print job (${saved.length} file${saved.length > 1 ? 's' : ''}) — pickup ${job.pickup_code}`, `${b.name || 'A customer'} sent ${saved.length} file${saved.length > 1 ? 's' : ''} to ${shop.name}:\n${listing}\n\nOpen your queue to print: ${BASE}/shop/dashboard\n\nPickup code: ${job.pickup_code}`);
-      return json(res, 200, { pickup_code: job.pickup_code, count: saved.length });
+      // Held as 'pending' until the customer confirms their email (so the shop never prints
+      // for a bogus address and the pickup code reaches a real inbox).
+      const job = db.createJobGroup({ shop_id: shop.id, customer_name: b.name, customer_email: email, status: 'pending' }, saved);
+      const t = db.makeToken(email, 'release:' + job.group_id, 60);
+      mail(email, `Confirm your email to send ${saved.length} file${saved.length > 1 ? 's' : ''} to ${shop.name}`,
+        `Tap this link to release your print job to ${shop.name}:\n${BASE}/release?t=${t}\n\n${jobListing(saved)}\n\nYour pickup code appears once you confirm. The link expires in 60 minutes; if you didn't request this, ignore it.`);
+      return json(res, 200, { pending: true, email, count: saved.length });
+    }
+    if (req.method === 'GET' && url === '/release') {
+      const row = db.useToken(q.t);
+      const gid = row && String(row.purpose || '').startsWith('release:') ? row.purpose.slice(8) : null;
+      const jobs = gid ? db.releaseGroup(gid) : [];
+      if (!jobs.length) return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Link expired', `<div class=head><h1>PRINT<span class=at>@</span></h1></div><div class=card><p>That link expired or was already used. <a href="/app">Send the job again</a>.</p></div>`));
+      const shop = db.shopById(jobs[0].shop_id); const first = jobs[0];
+      notifyShop(shop, jobs, first.customer_name);
+      mail(first.customer_email, `Your pickup code for ${shop.name}: ${first.pickup_code}`,
+        `Your ${jobs.length} file${jobs.length > 1 ? 's are' : ' is'} on the way to ${shop.name}${shop.address ? ', ' + shop.address : ''}.\n\nPickup code: ${first.pickup_code}\n\nShow it at the counter. Reply to this email if you have a question about the order.`);
+      return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Sent to ' + shop.name, `<div class=head><h1>PRINT<span class=at>@</span></h1></div>
+        <div class=card style=background:#e8f5ec><div class=lab>Sent</div><p><b>${jobs.length} file${jobs.length > 1 ? 's' : ''}</b> released to <b>${esc(shop.name)}</b>${shop.address ? ' · ' + esc(shop.address) : ''}.</p>
+        <p>Show this pickup code at the counter:</p><div style="font-family:Anton;font-size:44px;letter-spacing:4px">${first.pickup_code}</div>
+        <p class=muted>We also emailed it to ${esc(first.customer_email)}.</p></div>`));
     }
 
     // ---- DRIVER DEVICE AUTHORIZATION (magic link) ----
@@ -207,7 +233,7 @@ const server = http.createServer(async (req, res) => {
       const ref = 'PA-' + db.rid(4).toUpperCase();
       try {
         await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Replies go to ${dev.email}.`,
-          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: Buffer.from(b.fileB64, 'base64') });
+          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: Buffer.from(b.fileB64, 'base64') }, dev.email);
       } catch (e) { return json(res, 502, { error: 'send failed: ' + e.message }); }
       db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref });
       return json(res, 200, { ok: true, ref });
