@@ -165,19 +165,22 @@ function runClaude(prompt, cfg, onEvent = () => {}) {
   });
 }
 
-// Distance-only fallback when Claude is unavailable.
+// Fallback when Claude Code isn't installed or the run fails: no research, but every
+// candidate with a known email-to-print address (chains, hotel/library printers, kiosks,
+// library print services) is still fully automatable. Those sort first, then by distance.
 function fallbackRanking(candidates) {
-  return {
-    location_note: 'Ranked by distance only (AI ranking unavailable).',
-    ranked: candidates.map((c, i) => ({
-      id: c.id, name: c.name, address: c.address, distance_mi: c.distance_mi,
-      open_now: null, hours_today: '', est_cost_usd: null, cost_basis: '', turnaround: '',
-      rating: null, score: Math.max(0.05, 1 - i * 0.07), why: `${c.distance_mi} mi away`, automatable: false,
+  const knownEmail = c => (c.printeron && c.printeron.email) || (c.printme && c.printme.email) || (c.library_print && c.library_print.email) || c.chain_email || c.email || '';
+  const ranked = candidates.map(c => {
+    const email = knownEmail(c);
+    const base = { id: c.id, name: c.name, address: c.address, distance_mi: c.distance_mi, open_now: null, hours_today: '', est_cost_usd: null, cost_basis: '', turnaround: '', rating: null };
+    if (email) return { ...base, score: 0.9 - Math.min(c.distance_mi || 0, 25) / 50, why: `${c.distance_mi} mi away · takes orders by email`, automatable: true,
+      submit: { method: 'email', email, instructions: 'Email the PDF; the release code or confirmation comes back to you.' } };
+    return { ...base, score: 0.4 - Math.min(c.distance_mi || 0, 25) / 100, why: `${c.distance_mi} mi away`, automatable: false,
       submit: c.portal ? { method: 'portal', url: c.portal, phone: c.phone, instructions: 'Upload the PDF on the brand portal and choose this store for pickup.' }
         : c.phone ? { method: 'phone', phone: c.phone, url: c.url, instructions: 'Call to ask how they accept files.' }
-        : { method: 'in_person', url: c.url, instructions: 'Bring the file on a USB stick or ask at the counter.' },
-    })),
-  };
+        : { method: 'in_person', url: c.url, instructions: 'Bring the file on a USB stick or ask at the counter.' } };
+  }).sort((a, b) => b.score - a.score);
+  return { location_note: 'Ranked without AI research (install Claude Code for hours, prices and local shops). Places with a known email-to-print address come first.', ranked };
 }
 
 async function rank(job, loc, candidates, cfg, onEvent = () => {}) {

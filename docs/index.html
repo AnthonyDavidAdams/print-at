@@ -85,6 +85,12 @@
   .lg.big img{height:50px}.lg.mid img{height:42px}.lg.hotel img{height:46px}.lg.sticker img{height:66px}
   .lg:hover img{transform:scale(1.05)}
 
+  .shots{display:grid;grid-template-columns:1.1fr 1.1fr .8fr .8fr;gap:18px;margin-top:40px;align-items:start}
+  .shot{background:var(--card);border:3px solid var(--ink);box-shadow:6px 6px 0 rgba(28,58,87,.14);padding:10px}
+  .shot img{display:block;width:100%;height:auto;border:1px solid rgba(28,58,87,.25)}
+  .shot .n{font-family:"Anton";font-size:30px;color:var(--red);line-height:1;margin:8px 0 2px}
+  .shot h3{font-family:"Oswald";font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin:2px 0 4px;font-size:16px}
+  .shot p{margin:0;color:var(--ink2);font-size:14px;line-height:1.45}
   .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:40px}
   .step{background:var(--card);border:3px solid var(--ink);padding:26px 24px;position:relative;box-shadow:6px 6px 0 rgba(28,58,87,.14)}
   .step .n{font-family:"Anton";font-size:44px;color:var(--red);line-height:.9}
@@ -132,6 +138,7 @@
 
   @media(max-width:820px){
     .steps,.feats{grid-template-columns:1fr}
+    .shots{grid-template-columns:1fr 1fr}
     .stats{grid-template-columns:repeat(2,1fr)}
     .split{grid-template-columns:1fr}.split.rev{direction:ltr}
     .frame{transform:none}.frame.r{transform:none}
@@ -145,6 +152,7 @@
   <div class="brand">PRINT<span class="at">@</span><sup class="tm">™</sup></div>
   <div class="navlinks">
     <a href="#install">Install</a>
+    <a href="#hitprint">See it</a>
     <a href="#how">How</a>
     <a href="#reach">Reach</a>
     <a href="#board">The Board</a>
@@ -180,6 +188,18 @@
     <div class="step"><div class="n">01</div><h3>Hit Print</h3><p>Choose <b>Print@ Nearby</b>, or a saved shop like &ldquo;Print@ Staples.&rdquo; Set what matters: price, turnaround, open now, closest.</p></div>
     <div class="step"><div class="n">02</div><h3>It finds the shop</h3><p>It locates you, searches every network and local shop, checks hours and prices with AI, and shows the best match with the cost.</p></div>
     <div class="step"><div class="n">03</div><h3>Off it goes</h3><p>The PDF is emailed to the shop or the kiosk, a pickup code comes back, and you walk in and grab it. Often free at hotels.</p></div>
+  </div>
+</div></section>
+
+<section id="hitprint"><div class="wrap">
+  <div class="lab">What it looks like</div>
+  <h2>Hit Print.<br><span class="red">That's the whole app.</span></h2>
+  <p class="lead">Real screenshots from a Mac, printing a boarding pass. No new window to learn until the shop is picked.</p>
+  <div class="shots">
+    <div class="shot"><img src="assets/shots/1-print-dialog.png" alt="macOS Print dialog with Print@ Nearby selected as the printer"><div class="n">01</div><h3>Pick Print@ Nearby</h3><p>It sits in the printer menu of every app, next to the printer on your desk. Shops you've used become printers too.</p></div>
+    <div class="shot"><img src="assets/shots/2-options.png" alt="Print@ Dispatch options: optimize for, search radius, shop type, needed by, finishing, paper stock, how to send, confirm location"><div class="n">02</div><h3>Say what matters</h3><p>Closest, cheapest, open now. Chains only or anything that prints. Stapled, cardstock, needed by tomorrow. Save it as a preset.</p></div>
+    <div class="shot"><img src="assets/shots/3-searching.png" alt="Print@ status window checking hours, prices and how to order at ten places"><div class="n">03</div><h3>It does the calls</h3><p>Reads each shop's site, checks today's hours and prices, finds how they take files. You watch it work.</p></div>
+    <div class="shot"><img src="assets/shots/4-ranked.png" alt="Print@ status window showing best matches ranked with distance, hours, price and how the job is sent"><div class="n">04</div><h3>Pick, or let it</h3><p>A ranked shortlist with the reason for each. One click sends the PDF; the pickup code comes back to you.</p></div>
   </div>
 </div></section>
 
