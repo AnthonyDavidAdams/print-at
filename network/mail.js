@@ -77,13 +77,31 @@ function smtpAttach(to, cc, subject, text, att, replyTo) {
   return r.status === 0;
 }
 
+// Resend (https://resend.com) is the hosted network's sender: from print@printat.co, with
+// Reply-To honored and attachments as base64. Gmail API / SMTP below stay as fallbacks for
+// self-hosters who don't want a Resend account.
+const RESEND = process.env.RESEND_API_KEY || '';
+async function resendSend(to, cc, subject, text, att, replyTo) {
+  const msg = { from: `${FROM_NAME} <${FROM}>`, to: [to], subject, text };
+  if (cc) msg.cc = [cc];
+  if (replyTo) msg.reply_to = replyTo;
+  if (att) msg.attachments = [{ filename: att.filename, content: att.buffer.toString('base64') }];
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST', headers: { Authorization: `Bearer ${RESEND}`, 'Content-Type': 'application/json' }, body: JSON.stringify(msg),
+  });
+  if (!res.ok) throw new Error('resend ' + res.status + ' ' + (await res.text()).slice(0, 160));
+  return true;
+}
+
 module.exports = function send(to, subject, text) {
+  if (RESEND) return resendSend(to, '', subject, text, null, '').catch(e => { console.error('mail(resend):', e.message); return false; });
   if (process.env.GOOGLE_REFRESH_TOKEN) {
     return gmailApi(to, subject, text).catch(e => { console.error('mail(gmail):', e.message); return false; });
   }
   try { return smtp(to, subject, text); } catch (e) { console.error('mail(smtp):', e.message); return false; }
 };
 module.exports.withAttachment = function sendAttach(to, cc, subject, text, att, replyTo) {
+  if (RESEND) return resendSend(to, cc, subject, text, att, replyTo);
   if (process.env.GOOGLE_REFRESH_TOKEN) return gmailApiAttach(to, cc, subject, text, att, replyTo);
   return Promise.resolve().then(() => { if (!smtpAttach(to, cc, subject, text, att, replyTo)) throw new Error('smtp send failed'); return true; });
 };
