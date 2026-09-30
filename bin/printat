@@ -1,7 +1,10 @@
 #!/bin/bash
 # Print@ command line. Mostly you never need this — the printer just works from the
 # Print dialog. The one useful command is connecting this Mac to the Print@ cloud.
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve symlinks (/usr/local/bin/printat -> <repo>/bin/printat) so DIR is the repo root.
+SELF="${BASH_SOURCE[0]}"
+while [ -L "$SELF" ]; do T="$(readlink "$SELF")"; case "$T" in /*) SELF="$T" ;; *) SELF="$(dirname "$SELF")/$T" ;; esac; done
+DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
 NODE="$(command -v node)"
 cmd="${1:-help}"; shift || true
 case "$cmd" in

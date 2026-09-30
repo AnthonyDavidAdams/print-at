@@ -60,7 +60,7 @@ sleep 1
 if curl -sf "http://127.0.0.1:4243/health" >/dev/null; then echo "    agent is up"; else echo "    agent did not answer on :4243 — check ~/Library/Logs/PrintAt/"; fi
 
 echo "==> Installing 'printat' command"
-ln -sf "$ROOT/bin/printat" /usr/local/bin/printat 2>/dev/null && echo "    /usr/local/bin/printat -> repo" || echo "    (could not symlink; run $ROOT/bin/printat directly)"
+mkdir -p /usr/local/bin 2>/dev/null; ln -sf "$ROOT/bin/printat" /usr/local/bin/printat 2>/dev/null && echo "    /usr/local/bin/printat -> repo" || echo "    (could not symlink; run $ROOT/bin/printat directly)"
 
 echo
 echo "Done. 'Print@ Nearby' is now a printer in every Print dialog. 'Print@ Console' is in ~/Applications."
