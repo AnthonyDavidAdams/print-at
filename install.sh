@@ -104,6 +104,13 @@ echo "  2. A Print@ window opens and shows it locating you and checking nearby s
 echo "  3. It shows the best shop and how the job will be sent; click 'Use this shop' (or it sends automatically if you chose that)."
 echo "  4. The order goes out; the pickup or release code comes back to your email."
 echo "Test from a terminal:  lp -d PrintAt -o Delivery=FindOnly some.pdf   (finds a shop, sends nothing)"
+if [ -r /dev/tty ] && [ -f "$ROOT/test/sample-boarding-pass.pdf" ]; then
+  read -r -p "Want to see it work right now? It prints a sample boarding pass in find-only mode: a Print@ window opens, finds a shop near you, sends nothing. [Y/n] " demo </dev/tty || demo=y
+  case "$demo" in n|N|no|NO) ;; *)
+    sudo -u "$REAL_USER" lp -d PrintAt -o Delivery=FindOnly -o ConfirmLocation=Auto -t "Print@ demo" "$ROOT/test/sample-boarding-pass.pdf" >/dev/null 2>&1 \
+      && echo "    Sent. Watch for the Print@ window (it may take a minute or two)." || echo "    Could not queue the demo; try: lp -d PrintAt -o Delivery=FindOnly $ROOT/test/sample-boarding-pass.pdf" ;;
+  esac
+fi
 if grep -qiE "warning|Bootstrap failed|error" "$INSTALL_LOG"; then trap - ERR; report_install_problem "finished with warnings"; fi
 trap - ERR
 echo
