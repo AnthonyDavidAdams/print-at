@@ -78,6 +78,11 @@ never your documents). Shops nobody has seen yet get a cheap one-time pass on th
 (page fetch + regex + a decision model), so even a driver with `research: none` gets good
 answers for places the network has touched. Every job makes the next person's faster.
 
+## Terms and privacy
+
+Use is at your own risk; shops are independent businesses and once a file is sent we can't control
+what happens on their end. Full text: https://printat.co/terms and https://printat.co/privacy.
+
 ## Retention
 
 Orders relayed for a connected driver are never stored: the PDF goes out by email and only the

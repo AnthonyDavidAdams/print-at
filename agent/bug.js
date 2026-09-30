@@ -14,7 +14,8 @@ function sh(cmd, args) { try { return execFileSync(cmd, args, { encoding: 'utf8'
 
 function diagnostics(cfg) {
   const safe = { ...cfg }; for (const k of Object.keys(safe)) if (/key|token|password/i.test(k)) safe[k] = safe[k] ? '(set)' : '';
-  delete safe.dryRun; delete safe.skipClaude;
+  delete safe.dryRun; delete safe.skipClaude; delete safe.homeAddress; delete safe.contactPhone;
+  const redact = t => String(t || '').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '<email>').replace(/\(?\b[2-9]\d{2}\)?[-. ]\d{3}[-. ]\d{4}\b/g, '<phone>');
   const logFile = path.join(cfgmod.LOG_DIR, 'agent.log');
   let logTail = ''; try { const l = fs.readFileSync(logFile, 'utf8').trim().split('\n'); logTail = l.slice(-80).join('\n'); } catch {}
   let receipt = ''; try { const jobs = fs.readdirSync(cfgmod.JOBS_DIR).sort().reverse(); for (const j of jobs) { const r = path.join(cfgmod.JOBS_DIR, j, 'receipt.md'); if (fs.existsSync(r)) { receipt = fs.readFileSync(r, 'utf8').slice(0, 4000); break; } } } catch {}
@@ -24,7 +25,7 @@ function diagnostics(cfg) {
     claude_cli: sh('claude', ['--version']) || '(not found)',
     printers: sh('lpstat', ['-p']), backend: fs.existsSync('/usr/libexec/cups/backend/printat') ? 'installed' : 'MISSING',
     agent: (() => { try { return sh('curl', ['-s', '-m', '3', `http://127.0.0.1:${cfg.port}/health`]) || '(no answer)'; } catch { return '(no answer)'; } })(),
-    connected: cloud.connected(cfg), config: safe, log_tail: logTail, last_receipt: receipt,
+    connected: cloud.connected(cfg), config: safe, log_tail: redact(logTail), last_receipt: redact(receipt),
   };
 }
 

@@ -54,9 +54,12 @@ case "$LAST" in
   DONE*)
     echo "INFO: ${LAST#DONE }" >&2
     exit 0 ;;
+  CANCEL*)
+    echo "INFO: ${LAST#CANCEL }" >&2
+    exit 5 ;;                       # CUPS_BACKEND_CANCEL: user cancelled / nothing to send, do not retry
   FAIL*)
     echo "ERROR: ${LAST#FAIL }" >&2
-    exit 1 ;;                       # CUPS_BACKEND_FAILED
+    exit 5 ;;                       # terminal failure (no shop, not viable): cancel rather than retry forever
   *)
     if [ "$GOT_ANY" = 0 ]; then
       echo "STATE: +offline-report" >&2

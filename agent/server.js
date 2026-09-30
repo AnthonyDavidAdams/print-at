@@ -71,7 +71,13 @@ function buildSpec(opts, copiesHeader, pdfPath) {
   };
 }
 
-const server = http.createServer((req, res) => {
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+const server = http.createServer(async (req, res) => {
+  // Loopback binding is not authentication: refuse requests whose Host header is not local
+  // (DNS-rebinding guard) and refuse cross-origin mutations from web pages.
+  const host = String(req.headers.host || '').replace(/:\d+$/, '');
+  if (!LOCAL_HOSTS.has(host)) { res.writeHead(421); return res.end('wrong host'); }
+  if (req.method !== 'GET' && req.headers.origin && !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(req.headers.origin)) { res.writeHead(403); return res.end('cross-origin request refused'); }
   if (console_.handle(req, res, cfg)) return;
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -106,14 +112,15 @@ const server = http.createServer((req, res) => {
       res.writeHead(415); return res.end('expected a PDF body');
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const id = `${stamp}-${req.headers['x-np-job-id'] || 'manual'}`;
+    const cupsId = String(req.headers['x-np-job-id'] || 'manual').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'manual';
+    const id = `${stamp}-${cupsId}-${require('crypto').randomBytes(3).toString('hex')}`;
     const dir = path.join(JOBS_DIR, id);
     fs.mkdirSync(dir, { recursive: true });
     const title = (b64(req.headers['x-np-title']) || 'Untitled').trim();
     const safeTitle = title.replace(/\.pdf$/i, '').replace(/[^\w.\- ]+/g, '_').slice(0, 80) || 'document';
     const pdfPath = path.join(dir, `${safeTitle}.pdf`);
     fs.writeFileSync(pdfPath, pdf);
-    const printer = req.headers['x-np-printer'] || 'PrintAt';
+    const printer = /^[A-Za-z0-9_]{1,64}$/.test(String(req.headers['x-np-printer'] || '')) ? String(req.headers['x-np-printer']) : 'PrintAt';
     const opts = { ...ppdDefaults(printer), ...parseOptions(b64(req.headers['x-np-options'])) };
     // A queue created for one shop carries it in its device URI: printat://localhost/?shop=Staples
     let pin = '', pinEmail = '';
@@ -153,7 +160,8 @@ const server = http.createServer((req, res) => {
         : r.status === 'found' ? `Found ${r.shop}` : r.status === 'manual' ? `${r.shop}: bring the file in` : r.status === 'cancelled' ? 'Cancelled'
         : r.status === 'dry_run' ? `Dry run: ${r.shop}` : r.status === 'failed' ? `FAIL ${r.error}` : r.status;
       finished = true;
-      res.end((r.status === 'cancelled' ? 'FAIL Cancelled by you' : line.startsWith('FAIL') ? line : `DONE ${line}`) + '\n');
+      const terminalNoSend = r.status === 'cancelled' || r.status === 'no_candidates' || r.status === 'no_viable';
+      res.end((terminalNoSend ? `CANCEL ${r.status === 'cancelled' ? 'Cancelled by you' : 'No shop could take this job'}` : line.startsWith('FAIL') ? line : `DONE ${line}`) + '\n');
     }).catch(e => {
       log(`job ${id}: pipeline error: ${e.stack || e.message}`);
       if (!job.cancelled) ui.notify(`Could not dispatch "${title}": ${e.message}`, 'Error');

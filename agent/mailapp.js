@@ -37,11 +37,12 @@ function accounts() {
 }
 
 function send({ to, cc, subject, body, attachment, from, draft }) {
-  const bodyFile = (attachment || path.join(require('os').tmpdir(), 'printat-mail')) + '.mailapp.txt';
-  fs.writeFileSync(bodyFile, body || '');
+  const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'printat-mail-'));
+  const bodyFile = path.join(tmpDir, 'body.txt');
+  fs.writeFileSync(bodyFile, body || '', { mode: 0o600 });
   const r = spawnSync('osascript', ['-', to, cc || '', subject, bodyFile, attachment || '', from || '', draft ? 'draft' : 'send'],
     { input: SCRIPT, encoding: 'utf8', timeout: 120000 });
-  try { fs.unlinkSync(bodyFile); } catch {}
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   if (r.status !== 0) {
     const err = (r.stderr || r.stdout).trim();
     if (/not allowed|-1743|Not authorized/i.test(err)) throw new Error('macOS blocked Print@ from controlling Mail. Allow it in System Settings › Privacy & Security › Automation, then print again.');

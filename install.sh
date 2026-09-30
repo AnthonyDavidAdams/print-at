@@ -9,7 +9,7 @@ PRINTAT_BASE="${PRINTAT_BASE:-https://printat.co}"
 # Everything below is logged; if the install fails (or logs a warning) we offer to send the
 # log to Print@ support so the problem gets fixed for the next person too.
 REAL_USER_EARLY="${SUDO_USER:-$USER}"; LOGDIR="$(eval echo "~$REAL_USER_EARLY")/Library/Logs/PrintAt"; mkdir -p "$LOGDIR" 2>/dev/null || LOGDIR=/tmp
-INSTALL_LOG="$LOGDIR/install.log"; : > "$INSTALL_LOG"; chown "$REAL_USER_EARLY" "$INSTALL_LOG" 2>/dev/null || true
+INSTALL_LOG="$LOGDIR/install.log"; sudo -u "$REAL_USER_EARLY" sh -c "rm -f '$INSTALL_LOG'; umask 077; : > '$INSTALL_LOG'" 2>/dev/null || INSTALL_LOG=/tmp/printat-install.log
 exec > >(tee -a "$INSTALL_LOG") 2>&1
 report_install_problem() {
   local kind="$1"
@@ -41,10 +41,14 @@ PRINTER="PrintAt"
 
 if [ "$(id -u)" -ne 0 ]; then echo "Run with sudo: sudo $0"; exit 1; fi
 
+echo "Print@ is provided as-is; by installing you agree to https://printat.co/terms (privacy: https://printat.co/privacy)."
 echo "==> Building location helper and panel"
 sudo -u "$REAL_USER" bash -c "cd '$ROOT/helper' && swiftc -O -suppress-warnings main.swift -o printat-locate -framework CoreLocation -framework MapKit \
   -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Info.plist 2>&1 | grep -v warning || true; codesign -s - -f printat-locate; cd '$ROOT/helper/panel' && swiftc -O -suppress-warnings main.swift -o PrintAtPanel -framework SwiftUI -framework AppKit 2>&1 | grep -v warning || true; mkdir -p PrintAt.app/Contents/MacOS PrintAt.app/Contents/Resources; cp PrintAtPanel PrintAt.app/Contents/MacOS/PrintAtPanel; cp Bundle-Info.plist PrintAt.app/Contents/Info.plist; cp '$ROOT/icon/PrintAt.icns' PrintAt.app/Contents/Resources/PrintAt.icns; codesign -s - -f --deep PrintAt.app; cd '$ROOT/helper/console' && swiftc -O -suppress-warnings main.swift -o PrintAtConsole -framework AppKit -framework WebKit 2>&1 | grep -v warning || true; rm -rf 'Print@ Console.app'; mkdir -p 'Print@ Console.app/Contents/MacOS' 'Print@ Console.app/Contents/Resources'; cp PrintAtConsole 'Print@ Console.app/Contents/MacOS/'; cp Bundle-Info.plist 'Print@ Console.app/Contents/Info.plist'; cp '$ROOT/icon/PrintAt.icns' 'Print@ Console.app/Contents/Resources/PrintAt.icns'; codesign -s - -f --deep 'Print@ Console.app'; mkdir -p '$REAL_HOME/Applications'; rm -rf '$REAL_HOME/Applications/Print@ Console.app'; cp -R 'Print@ Console.app' '$REAL_HOME/Applications/'"
 
+for bin in "$ROOT/helper/printat-locate" "$ROOT/helper/panel/PrintAt.app/Contents/MacOS/PrintAtPanel" "$ROOT/helper/console/Print@ Console.app/Contents/MacOS/PrintAtConsole"; do
+  [ -x "$bin" ] || { echo "!! build failed: $bin is missing (is Xcode Command Line Tools installed? xcode-select --install)"; exit 1; }
+done
 echo "==> Installing icon + CUPS backend"
 mkdir -p /Library/Printers/Icons
 install -m 0644 "$ROOT/icon/PrintAt.icns" /Library/Printers/Icons/PrintAt.icns
@@ -80,9 +84,10 @@ JSON
   echo "    wrote $APP/config.json — fill in contactEmail (used as SMTP sender) and contactPhone"
 fi
 PLIST="$REAL_HOME/Library/LaunchAgents/io.printat.agent.plist"
-sed -e "s|__NODE__|$NODE|g" -e "s|__ROOT__|$ROOT|g" -e "s|__HOME__|$REAL_HOME|g" \
-  "$ROOT/launchd/io.printat.agent.plist.template" > "$PLIST"
-chown "$REAL_USER" "$PLIST"
+sudo -u "$REAL_USER" mkdir -p "$REAL_HOME/Library/LaunchAgents"
+sed -e "s|__NODE__|$NODE|g" -e "s|__ROOT__|$ROOT|g" -e "s|__HOME__|$REAL_HOME|g" "$ROOT/launchd/io.printat.agent.plist.template" \
+  | sudo -u "$REAL_USER" tee "$PLIST" >/dev/null
+plutil -lint "$PLIST" >/dev/null || { echo "!! generated launchd plist is invalid"; exit 1; }
 launchctl bootout "gui/$REAL_UID/io.printat.agent" 2>/dev/null || true
 sleep 0.5
 # launchd sometimes answers "Bootstrap failed: 5: Input/output error" when the old instance is

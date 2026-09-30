@@ -29,6 +29,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS shop_facts(key TEXT PRIMARY KEY, name TEXT, address TEXT, lat REAL, lon REAL, brand TEXT,
     method TEXT, email TEXT, url TEXT, phone TEXT, instructions TEXT, hours_today TEXT, cost_basis TEXT, est_cost_usd REAL, rating REAL,
     source TEXT, confidence REAL DEFAULT 0.5, confirmations INTEGER DEFAULT 0, last_outcome TEXT, verified INTEGER, updated INTEGER);
+  CREATE TABLE IF NOT EXISTS consents(id INTEGER PRIMARY KEY, subject TEXT, surface TEXT, version TEXT, ip TEXT, created INTEGER);
   CREATE TABLE IF NOT EXISTS tickets(id INTEGER PRIMARY KEY, email TEXT, source TEXT, description TEXT, diagnostics TEXT, screenshot TEXT,
     category TEXT, faq_id TEXT, faq_confidence REAL, status TEXT DEFAULT 'open', created INTEGER);
   CREATE TABLE IF NOT EXISTS replies(id INTEGER PRIMARY KEY, kind TEXT, ref TEXT, from_email TEXT, to_email TEXT, forwarded_to TEXT, subject TEXT, text TEXT, created INTEGER);
@@ -38,7 +39,7 @@ db.exec(`
 try { db.exec('ALTER TABLE jobs ADD COLUMN group_id TEXT'); } catch {}
 const now = () => Date.now();
 const rid = (n = 16) => require('crypto').randomBytes(n).toString('hex');
-const code = () => String(Math.floor(100000 + Math.random() * 900000));
+const code = () => { for (let i = 0; i < 50; i++) { const c = String(require('crypto').randomInt(100000, 1000000)); if (!db.prepare("SELECT 1 FROM jobs WHERE pickup_code=? AND status!='done' LIMIT 1").get(c)) return c; } return String(require('crypto').randomInt(100000, 1000000)); };
 
 module.exports = {
   DIR, now, rid, code,
@@ -66,7 +67,7 @@ module.exports = {
     const pc = code(), rt = rid(12), gid = rid(8); let firstId = null;
     for (const it of items) {
       const r = db.prepare(`INSERT INTO jobs(shop_id,customer_name,customer_email,filename,filepath,pages,copies,color,pickup_code,group_id,rate_token,status,created)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(base.shop_id, base.customer_name, base.customer_email, it.filename, it.filepath, it.pages || 0, it.copies || 1, it.color ? 1 : 0, pc, gid, rt, base.status || 'queued', now());
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(base.shop_id, base.customer_name || '', base.customer_email || '', it.filename || 'document.pdf', it.filepath, it.pages || 0, it.copies || 1, it.color ? 1 : 0, pc, gid, rt, base.status || 'queued', now());
       if (firstId == null) firstId = r.lastInsertRowid;
     }
     return { id: firstId, pickup_code: pc, rate_token: rt, group_id: gid };
@@ -92,6 +93,23 @@ module.exports = {
   },
   pollByMagic: m => db.prepare('SELECT * FROM device_polls WHERE magic=?').get(m || ''),
   pollById: p => db.prepare('SELECT * FROM device_polls WHERE poll=?').get(p || ''),
+  pollByMagic: m => { const r = db.prepare('SELECT * FROM device_polls WHERE magic=?').get(m || ''); return r && !r.device_token && r.expires > now() ? r : null; },
+  consumePoll(poll) { db.prepare('DELETE FROM device_polls WHERE poll=?').run(poll || ''); },
+  deleteDevice(token) { db.prepare('DELETE FROM devices WHERE token=?').run(token || ''); },
+  dispatchProof: (device_token, to_email) => !!db.prepare("SELECT 1 FROM dispatches WHERE device_token=? AND lower(to_email)=lower(?) AND status IN ('sent','replied') AND created > ? LIMIT 1").get(device_token || '', to_email || '', now() - 7 * 864e5),
+  // A driver's report is a proposal: it fills gaps and refreshes matching facts, but never
+  // silently redirects a destination that has been confirmed by real orders.
+  upsertFactProposal(f) {
+    const cur = db.prepare('SELECT * FROM shop_facts WHERE key=?').get(f.key);
+    const sub = f.submit || {};
+    if (cur && cur.method && cur.confirmations > 0) {
+      const sameDest = (cur.method === sub.method) && ((cur.email || '') === (sub.email || '')) && ((cur.url || '') === (sub.url || ''));
+      if (!sameDest) return false; // keep the confirmed destination; a change needs new evidence
+    }
+    if (cur && cur.method && cur.method !== 'phone' && cur.method !== 'in_person' && (sub.method === 'phone' || sub.method === 'in_person')) return false; // never downgrade a working destination to "call them"
+    this.upsertFact({ ...f, confirmations: cur ? cur.confirmations : 0 });
+    return true;
+  },
   confirmDevicePoll(magic) {
     const row = db.prepare('SELECT * FROM device_polls WHERE magic=?').get(magic || '');
     if (!row || row.expires < now() || row.device_token) return row && row.device_token ? row : null;
@@ -120,10 +138,11 @@ module.exports = {
         method=excluded.method, email=excluded.email, url=excluded.url, phone=COALESCE(NULLIF(excluded.phone,''),shop_facts.phone), instructions=excluded.instructions,
         hours_today=COALESCE(NULLIF(excluded.hours_today,''),shop_facts.hours_today), cost_basis=COALESCE(NULLIF(excluded.cost_basis,''),shop_facts.cost_basis), est_cost_usd=COALESCE(excluded.est_cost_usd,shop_facts.est_cost_usd), rating=COALESCE(excluded.rating,shop_facts.rating),
         source=excluded.source, confidence=excluded.confidence, verified=excluded.verified, updated=excluded.updated`)
-      .run(f.key, f.name || '', f.address || '', f.lat ?? null, f.lon ?? null, f.brand || '', sub.method || '', sub.email || '', sub.url || '', sub.phone || f.phone || '', sub.instructions || '', f.hours_today || '', f.cost_basis || '', f.est_cost_usd ?? null, f.rating ?? null, f.source || 'driver', f.confidence ?? 0.7, 0, null, now(), now());
+      .run(f.key, f.name || '', f.address || '', f.lat ?? null, f.lon ?? null, f.brand || '', sub.method || '', sub.email || '', sub.url || '', sub.phone || f.phone || '', sub.instructions || '', f.hours_today || '', f.cost_basis || '', f.est_cost_usd ?? null, f.rating ?? null, f.source || 'driver', f.confidence ?? 0.7, f.confirmations || 0, null, now(), now());
     return db.prepare('SELECT * FROM shop_facts WHERE key=?').get(f.key);
   },
   recordOutcome(key, outcome) { db.prepare("UPDATE shop_facts SET confirmations=confirmations+?, last_outcome=?, confidence=MIN(0.99, confidence+?), updated=? WHERE key=?").run(outcome === 'sent' || outcome === 'picked_up' ? 1 : 0, outcome, outcome === 'picked_up' ? 0.1 : outcome === 'sent' ? 0.05 : outcome === 'bounced' || outcome === 'failed' ? -0.3 : 0, now(), key); },
+  recordConsent(subject, surface, version, ip) { db.prepare('INSERT INTO consents(subject,surface,version,ip,created) VALUES(?,?,?,?,?)').run(String(subject || '').toLowerCase(), surface, version, ip || '', now()); },
   // support tickets
   createTicket(t) { const r = db.prepare('INSERT INTO tickets(email,source,description,diagnostics,screenshot,category,faq_id,faq_confidence,status,created) VALUES(?,?,?,?,?,?,?,?,?,?)').run(t.email || '', t.source || 'web', t.description || '', t.diagnostics || '', t.screenshot || '', t.category || '', t.faq_id || '', t.faq_confidence ?? null, t.status || 'open', now()); return r.lastInsertRowid; },
   ticket: id => db.prepare('SELECT * FROM tickets WHERE id=?').get(id),
@@ -134,5 +153,5 @@ module.exports = {
   logReply(r) { db.prepare('INSERT INTO replies(kind,ref,from_email,to_email,forwarded_to,subject,text,created) VALUES(?,?,?,?,?,?,?,?)').run(r.kind, r.ref, r.from_email, r.to_email, r.forwarded_to || '', r.subject || '', (r.text || '').slice(0, 20000), now()); },
   repliesFor: (kind, ref) => db.prepare('SELECT * FROM replies WHERE kind=? AND ref=? ORDER BY id').all(kind, ref),
   logDispatch(d) { const r = db.prepare(`INSERT INTO dispatches(device_token,email,shop_name,shop_address,to_email,subject,filename,ref,status,created)
-    VALUES(?,?,?,?,?,?,?,?,'sent',?)`).run(d.device_token, d.email, d.shop_name, d.shop_address, d.to_email, d.subject, d.filename, d.ref, now()); return r.lastInsertRowid; },
+    VALUES(?,?,?,?,?,?,?,?,?,?)`).run(d.device_token || '', d.email || '', d.shop_name || '', d.shop_address || '', d.to_email || '', d.subject || '', d.filename || '', d.ref, d.status || 'sent', now()); return r.lastInsertRowid; },
 };

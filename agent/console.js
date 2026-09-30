@@ -31,7 +31,7 @@ function page(cfg) {
   const ps = printers();
   const mem = readJson(MEMORY_PATH, []);
   const shops = readJson(SHOP_CACHE_PATH, {});
-  const hist = fs.existsSync(HISTORY_PATH) ? fs.readFileSync(HISTORY_PATH, 'utf8').trim().split('\n').filter(Boolean).map(l => readJson === null ? null : JSON.parse(l)).reverse().slice(0, 25) : [];
+  const hist = fs.existsSync(HISTORY_PATH) ? fs.readFileSync(HISTORY_PATH, 'utf8').trim().split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).reverse().slice(0, 25) : [];
   const row = cells => `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
   const btn = (action, fields, label) => `<form method="post" action="${action}" style="display:inline">${Object.entries(fields).map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}">`).join('')}<button>${label}</button></form>`;
   return `<!doctype html><meta charset="utf-8"><title>Print@ console</title>
@@ -76,8 +76,8 @@ async function sendBug(e){e.preventDefault();const f=e.target,n=document.getElem
   <option value="anthropic" ${cfg.research==='anthropic'?'selected':''}>Anthropic API key</option>
   <option value="openai" ${cfg.research==='openai'?'selected':''}>OpenAI API key</option>
   <option value="none" ${cfg.research==='none'?'selected':''}>None (distance + known addresses only)</option></select></label>
-<label>Anthropic API key <input type="password" name="anthropicApiKey" value="${esc(cfg.anthropicApiKey || '')}" autocomplete="off"></label>
-<label>OpenAI API key <input type="password" name="openaiApiKey" value="${esc(cfg.openaiApiKey || '')}" autocomplete="off"></label>
+<label>Anthropic API key ${cfg.anthropicApiKey ? '<span class=muted>(configured — leave blank to keep, type "clear" to remove)</span>' : ''}<input type="password" name="anthropicApiKey" value="" autocomplete="off"></label>
+<label>OpenAI API key ${cfg.openaiApiKey ? '<span class=muted>(configured — leave blank to keep, type "clear" to remove)</span>' : ''}<input type="password" name="openaiApiKey" value="" autocomplete="off"></label>
 <label>Research model (blank = default) <input type="text" name="researchModel" value="${esc(cfg.researchModel || '')}" placeholder="claude-opus-5 / gpt-5"></label>
 <label class="check"><input type="checkbox" name="shareFacts" ${cfg.shareFacts !== false ? 'checked' : ''}> Share what Print@ learns about shops (hours, prices, how they take orders) with the Print@ cloud so everyone's next job is faster. Never your documents.</label>
 <label>Local-mode sender <select name="sender"><option value="mailapp" ${(cfg.sender||'mailapp')!=='smtp'?'selected':''}>Mail.app (any account you already have; no passwords)</option><option value="smtp" ${cfg.sender==='smtp'?'selected':''}>SMTP with an app password (Gmail-style)</option></select></label>
@@ -199,15 +199,17 @@ function handle(req, res, cfg) {
   if (url === '/api/bug') {
     let raw = ''; req.on('data', d => raw += d); req.on('end', async () => {
       try { const b = JSON.parse(raw || '{}'); let shotPath = '';
-        if (b.screenshot && b.screenshot.b64) { shotPath = path.join(require('os').tmpdir(), 'printat-bug-' + Date.now() + '.png'); fs.writeFileSync(shotPath, Buffer.from(b.screenshot.b64, 'base64')); }
-        const r = await require('./bug').send({ description: String(b.description || ''), screenshotPath, cfg });
+        let tmpDir = '';
+        if (b.screenshot && b.screenshot.b64) { tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'printat-bug-')); shotPath = path.join(tmpDir, 'shot.png'); fs.writeFileSync(shotPath, Buffer.from(String(b.screenshot.b64).slice(0, 12e6), 'base64'), { mode: 0o600 }); }
+        let r; try { r = await require('./bug').send({ description: String(b.description || '').slice(0, 20000), screenshotPath, cfg }); } finally { if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }); }
         res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r));
       } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
     }); return true;
   }
   if (url === '/settings') return form(req, f => {
     const cur = readJson(CONFIG_PATH, {});
-    for (const k of ['contactName', 'contactEmail', 'contactPhone', 'homeAddress', 'gmailEnv', 'claudeModel', 'sender', 'mailAccount', 'research', 'anthropicApiKey', 'openaiApiKey', 'researchModel']) if (k in f) cur[k] = (f[k] || '').trim();
+    for (const k of ['contactName', 'contactEmail', 'contactPhone', 'homeAddress', 'gmailEnv', 'claudeModel', 'sender', 'mailAccount', 'research', 'researchModel']) if (k in f) cur[k] = (f[k] || '').trim();
+    for (const k of ['anthropicApiKey', 'openaiApiKey']) { const v = (f[k] || '').trim(); if (v === 'clear') cur[k] = ''; else if (v) cur[k] = v; }
     cur.ccSelf = !!f.ccSelf;
     cur.shareFacts = !!f.shareFacts;
     if (cur.contactEmail && !cur.smtpUser) cur.smtpUser = cur.contactEmail;

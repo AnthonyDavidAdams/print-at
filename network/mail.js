@@ -5,6 +5,9 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 const os = require('os');
 
+// Header hygiene: one address per field, no line breaks (header injection), bounded subject.
+const hdr = v => String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').slice(0, 500);
+const addr = v => { const a = hdr(v).trim(); return /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(a) ? a : ''; };
 const FROM = process.env.PRINTAT_FROM || process.env.SMTP_USER || 'anthony@175g.com';
 const FROM_NAME = process.env.PRINTAT_FROM_NAME || 'Print@ Network';
 
@@ -15,7 +18,8 @@ async function gmailApi(to, subject, text) {
       refresh_token: process.env.GOOGLE_REFRESH_TOKEN, grant_type: 'refresh_token' }),
   }).then(r => r.json());
   if (!tok.access_token) throw new Error('gmail token: ' + JSON.stringify(tok).slice(0, 120));
-  const mime = [`From: ${FROM_NAME} <${FROM}>`, `To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=UTF-8', '', text].join('\r\n');
+  to = addr(to); if (!to) throw new Error('invalid recipient'); subject = hdr(subject);
+  const mime = [`From: ${hdr(FROM_NAME)} <${FROM}>`, `To: ${to}`, `Subject: ${subject}`, 'Content-Type: text/plain; charset=UTF-8', '', text].join('\r\n');
   const raw = Buffer.from(mime).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST', headers: { Authorization: `Bearer ${tok.access_token}`, 'Content-Type': 'application/json' },
@@ -45,7 +49,8 @@ async function gmailApiAttach(to, cc, subject, text, att, replyTo) {
   if (!tok.access_token) throw new Error('gmail token: ' + JSON.stringify(tok).slice(0, 120));
   const bound = 'pa_' + Math.random().toString(36).slice(2);
   const b64 = att.buffer.toString('base64').replace(/(.{76})/g, '$1\r\n');
-  const head = [`From: ${FROM_NAME} <${FROM}>`, `To: ${to}`];
+  to = addr(to); if (!to) throw new Error('invalid recipient'); cc = cc ? addr(cc) : ''; replyTo = replyTo ? addr(replyTo) : ''; subject = hdr(subject);
+  const head = [`From: ${hdr(FROM_NAME)} <${FROM}>`, `To: ${to}`];
   if (cc) head.push(`Cc: ${cc}`);
   if (replyTo) head.push(`Reply-To: ${replyTo}`);
   head.push(`Subject: ${subject}`, 'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${bound}"`, '');
@@ -82,7 +87,8 @@ function smtpAttach(to, cc, subject, text, att, replyTo) {
 // self-hosters who don't want a Resend account.
 const RESEND = process.env.RESEND_API_KEY || '';
 async function resendSend(to, cc, subject, text, att, replyTo) {
-  const msg = { from: `${FROM_NAME} <${FROM}>`, to: [to], subject, text };
+  to = addr(to); if (!to) throw new Error('invalid recipient'); cc = cc ? addr(cc) : ''; replyTo = replyTo ? addr(replyTo) : ''; subject = hdr(subject);
+  const msg = { from: `${hdr(FROM_NAME)} <${FROM}>`, to: [to], subject, text };
   if (cc) msg.cc = [cc];
   if (replyTo) msg.reply_to = replyTo;
   if (att) msg.attachments = [{ filename: att.filename, content: att.buffer.toString('base64') }];

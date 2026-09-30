@@ -210,10 +210,16 @@ async function run(job, cfg, report = () => {}) {
       if (s.method === 'network') {
         const items = [{ filename: path.basename(job.pdf), fileB64: fs.readFileSync(job.pdf).toString('base64'), copies: spec.copies, color: spec.color ? 'color' : 'bw' }];
         const out = await cloud.sendNetworkJob(cfg, { networkId: s.network_id, items, name: cfg.contactName, email: cfg.contactEmail });
-        receipt.push(`Sent through Print@ Network. Pickup code: ${out.pickup_code}.`);
-        job.result = { status: 'sent', shop: pick.name, method: 'network', pickup_code: out.pickup_code };
+        if (out.pending) {
+          receipt.push(`Handed to Print@ Network for ${pick.name}. Pending: confirm the email sent to ${out.email} to release it; the pickup code arrives once confirmed.`);
+          job.result = { status: 'pending_confirmation', shop: pick.name, method: 'network', email: out.email };
+          ui.notify(`Check ${out.email}: confirm the link to release the job to ${pick.name}.`, 'Print@ Network');
+        } else {
+          receipt.push(`Sent through Print@ Network. Pickup code: ${out.pickup_code}.`);
+          job.result = { status: 'sent', shop: pick.name, method: 'network', pickup_code: out.pickup_code };
+          ui.notify(`Sent to ${pick.name}. Pickup code ${out.pickup_code}.`, 'Sent via Print@');
+        }
         memory.remember(loc, spec, pick);
-        ui.notify(`Sent to ${pick.name}. Pickup code ${out.pickup_code}.`, 'Sent via Print@');
         if (ux) {
           const added = autoAddPrinter(pick, spec, receipt);
           const act = await ux.result(`Sent to ${pick.name} through Print@ Network.\n\nPickup code: ${out.pickup_code}\nShow it at the counter. ${cfg.contactEmail ? `A copy went to ${cfg.contactEmail}.` : ''}\n${pick.address}${added}`, [{ key: 'maps', label: 'Open in Maps' }, { key: 'done', label: 'Done' }]);
@@ -234,9 +240,12 @@ async function run(job, cfg, report = () => {}) {
             const r = await cloud.dispatchEmail(cfg, { to: s.email, cc, subject, body, pdfPath: job.pdf, shop: pick, meta: { pages: spec.pages, copies: spec.copies, color: spec.color } });
             out = `Print@ cloud (ref ${r.ref})`; viaCloud = true;
           } catch (e) {
-            const localOk = (cfg.sender || 'mailapp') !== 'smtp' || !!cfg.smtpUser;
-            log(`cloud dispatch failed (${e.message}); ${localOk ? 'falling back to local email' : 'no local email configured'}`);
-            if (!localOk) throw e;
+            // A timeout or dropped connection is AMBIGUOUS: the email may have gone out. Never
+            // resend locally in that case, or the shop prints it twice.
+            const ambiguous = /timeout|abort|network|fetch failed|socket|ECONN|EAI_AGAIN/i.test(String(e && (e.name + ' ' + e.message)));
+            const localOk = !ambiguous && ((cfg.sender || 'mailapp') !== 'smtp' || !!cfg.smtpUser);
+            log(`cloud dispatch failed (${e.message}); ${ambiguous ? 'outcome unknown, NOT resending locally' : localOk ? 'falling back to local email' : 'no local email configured'}`);
+            if (!localOk) throw new Error(ambiguous ? `Cloud send did not confirm (${e.message}). Check your email for the shop's reply before printing again.` : e.message);
           }
         }
         if (!viaCloud) out = submit.sendEmail({ to: s.email, cc, subject, body, attachment: job.pdf, cfg });

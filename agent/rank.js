@@ -162,7 +162,7 @@ function runClaude(prompt, cfg, onEvent = () => {}) {
         if (!data || !Array.isArray(data.ranked)) return reject(new Error('claude returned no ranking'));
         log(`claude ranking done: ${j.num_turns} turns, $${(j.total_cost_usd || 0).toFixed(2)} equiv, ${Math.round((j.duration_ms || 0) / 1000)}s`);
         resolve(data);
-      } catch (e) { reject(new Error(`could not parse claude output: ${e.message}: ${out.slice(0, 300)}`)); }
+      } catch (e) { reject(new Error(`could not parse claude output: ${e.message}`)); }
     });
     child.stdin.end(prompt);
   });
@@ -212,9 +212,16 @@ async function rank(job, loc, candidates, cfg, onEvent = () => {}) {
       : await runClaude(prompt, cfg, onEvent);
     const byId = Object.fromEntries(candidates.map(c => [c.id, c]));
     const cache = loadCache();
-    data.ranked = data.ranked.map(r => {
-      const c = byId[r.id] || {};
-      const merged = { ...c, ...r, address: r.address || c.address, distance_mi: r.distance_mi ?? c.distance_mi };
+    // The model ranks; it does not get to invent candidates or rewrite where a known
+    // destination sends. Directory / chain / pooled-fact addresses win over model output.
+    const knownDest = c => (c.printeron && c.printeron.email) || (c.printme && c.printme.email) || (c.library_print && c.library_print.email) || c.chain_email || (c.known && c.known.submit && c.known.submit.method === 'email' && c.known.submit.email) || '';
+    data.ranked = data.ranked.filter(r => r && byId[r.id]).map(r => {
+      const c = byId[r.id];
+      if (r.submit && r.submit.method === 'portal' && !/^https?:\/\//i.test(String(r.submit.url || ''))) r.submit = { method: 'in_person', instructions: 'Ask at the counter.' };
+      if (r.submit && r.submit.method === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(r.submit.email || ''))) r.submit = { method: c.phone ? 'phone' : 'in_person', phone: c.phone, instructions: 'Call to ask how they accept files.' };
+      const fixed = knownDest(c);
+      if (fixed) r.submit = { method: 'email', email: fixed, instructions: (r.submit && r.submit.instructions) || 'Email the PDF.' };
+      const merged = { ...c, ...r, name: c.name, address: c.address, distance_mi: c.distance_mi ?? r.distance_mi, score: Number(r.score) || 0 };
       const known = cache[cacheKey(merged)];
       if (known && known.manual_email) {
         merged.submit = { method: 'email', email: known.manual_email, instructions: 'Order email entered by you in the Print@ console' };

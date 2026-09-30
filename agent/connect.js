@@ -35,12 +35,14 @@ async function main() {
     return;
   }
   if (arg === '--disconnect') {
+    if (cfg.cloudToken) { try { await fetch(`${(cfg.cloudBase || 'https://printat.co').replace(/\/+$/, '')}/api/device/revoke`, { method: 'POST', headers: { authorization: `Bearer ${cfg.cloudToken}` }, signal: AbortSignal.timeout(10000) }); } catch (e) { console.log(`(could not revoke on the server: ${e.message})`); } }
     save({ cloudToken: '', cloudEmail: '' });
     console.log('Disconnected. Print@ now runs fully local — jobs send from your own email again.');
     return;
   }
 
   console.log('\nConnect this Mac to Print@ (printat.co)');
+  console.log('  By connecting you agree to https://printat.co/terms and https://printat.co/privacy.');
   console.log('  Jobs will dispatch through the network: sent from a Print@ address,');
   console.log('  Print@ Network shops with real pickup codes, nothing to configure locally.\n');
   const email = arg && arg.includes('@') ? arg : await ask('Your email: ');

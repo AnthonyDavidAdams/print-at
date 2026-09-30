@@ -9,13 +9,29 @@ const db = require('./db');
 const mail = require('./mail');
 const shopResearch = require('./research');
 const FAQ = require('./faq');
+const legal = require('./legal');
 const qr = require('./qr');
 
 const PORT = process.env.PORT || 4260;
 const BASE = process.env.PRINTAT_NET_BASE || `http://localhost:${PORT}`;
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const body = req => new Promise(r => { const c = []; req.on('data', d => c.push(d)); req.on('end', () => r(Buffer.concat(c))); });
+const body = (req, max = 64 * 1024) => new Promise((resolve, reject) => {
+  const c = []; let n = 0;
+  req.on('data', d => { n += d.length; if (n > max) { reject(Object.assign(new Error('payload too large'), { status: 413 })); req.destroy(); } else c.push(d); });
+  req.on('end', () => resolve(Buffer.concat(c)));
+  req.on('error', e => reject(e)); req.on('aborted', () => reject(new Error('request aborted')));
+});
+const BIG = 30 * 1024 * 1024; // portal uploads, relayed PDFs, bug screenshots
+// Simple fixed-window rate limiter (per key). Enough to stop email bombing and paid-AI abuse.
+const RL = new Map();
+function limited(key, max, windowMs) {
+  const now = Date.now(); const e = RL.get(key) || { n: 0, t: now };
+  if (now - e.t > windowMs) { e.n = 0; e.t = now; }
+  e.n++; RL.set(key, e); if (RL.size > 50000) RL.clear();
+  return e.n > max;
+}
+const scriptJSON = v => JSON.stringify(v).replace(/</g, '\\u003c');
 const form = async req => Object.fromEntries(new URLSearchParams((await body(req)).toString()));
 const json = (res, code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
 const redirect = (res, to) => { res.writeHead(303, { Location: to }); res.end(); };
@@ -46,7 +62,7 @@ a{color:var(--red)}.muted{color:var(--ink2);font-size:14px}.stars{color:var(--go
 .head{display:flex;justify-content:space-between;align-items:baseline}
 h1:after{content:"™";font-family:"Bitter",serif;font-size:.36em;vertical-align:top;position:relative;top:.5em;margin-left:2px;color:var(--ink2)}
 </style><link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@600;700&family=Bitter:wght@400;600&display=swap" rel="stylesheet">`;
-const page = (title, inner) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${title}</title>${CSS}<div class=wrap>${inner}</div>`;
+const page = (title, inner) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${CSS}<div class=wrap>${inner}</div>`;
 
 // printat.co is the product's front door: the landing page (shared with the GitHub Pages
 // site in docs/), its assets, and the one-line installer. The customer portal lives at /app.
@@ -71,11 +87,13 @@ function customerPage(preShop) {
     <div id=items></div>
     <label>Your name<input id=cname placeholder="For the pickup"></label>
     <label>Your email (we confirm it, then send your pickup code there)<input id=cemail inputmode=email placeholder="you@example.com" required></label>
+    <p class=muted>Your file goes to the shop you pick; we can't control what happens on their end.</p>
+    ${AGREE_HTML.replace('name=agree', 'id=agree name=agree')}
     <button class=btn id=find>Find shops near me</button><div class=muted id=note style=margin-top:8px></div></div>
   <div class=card id=shops style=display:none><div class=lab>2 · Pick a shop</div><div id=list></div></div>
   <div class=card id=send style=display:none><div class=lab>3 · Send</div><div id=pick></div><button class=btn red id=go>Send to shop</button><div id=result></div></div>
   <script>
-  var items=[],pick=null;
+  var items=[],pick=null;var esc=function(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
   function render(){var box=document.getElementById('items');box.innerHTML=items.map((it,i)=>
     '<div class=job style="display:flex;gap:10px;align-items:center;margin-top:10px">'+
     (it.thumb?'<img src="'+it.thumb+'" data-i='+i+' class=ith style="width:46px;height:60px;object-fit:cover;border:1px solid #1c3a57;transition:filter .6s ease;filter:'+(it.color==='color'?'none':'grayscale(1)')+'">':'<div style="width:46px;height:60px;border:1px solid #1c3a57;display:flex;align-items:center;justify-content:center;font-family:Oswald;font-size:11px">PDF</div>')+
@@ -98,9 +116,9 @@ function customerPage(preShop) {
     fetch('/api/shops-nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(loc||{})}).then(r=>r.json()).then(d=>{
       if(!d.located){note.textContent='Could not find your location. Add ?shop=ID or try again.';return}
       if(!d.shops.length){note.textContent='No Print@ Network shops within 25 miles yet. Know a shop with a printer? Ask them to join at /join';return}
-      note.textContent=d.shops.length+' shop'+(d.shops.length>1?'s':'')+' near you';list.innerHTML=d.shops.map(s=>'<div class=job data-id='+s.id+' style=cursor:pointer><b>'+s.name+'</b> '+(s.stars?'<span class=stars>'+'\\u2605'.repeat(Math.round(s.stars))+'</span>':'')+'<div class=m>'+s.distance_mi+' mi · '+s.address+'</div><div class=m>'+(s.hours||'')+' · B&W '+(s.price_bw||'?')+' color '+(s.price_color||'?')+'</div></div>').join('');
+      note.textContent=d.shops.length+' shop'+(d.shops.length>1?'s':'')+' near you';list.innerHTML=d.shops.map(s=>'<div class=job data-id='+Number(s.id)+' style=cursor:pointer><b>'+esc(s.name)+'</b> '+(s.stars?'<span class=stars>'+'\\u2605'.repeat(Math.round(s.stars))+'</span>':'')+'<div class=m>'+esc(s.distance_mi)+' mi · '+esc(s.address)+'</div><div class=m>'+esc(s.hours||'')+' · B&W '+esc(s.price_bw||'?')+' color '+esc(s.price_color||'?')+'</div></div>').join('');
         shops.style.display='block';
-        document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+pick.name+'</b><br>'+pick.address;send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
+        document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+esc(pick.name)+'</b><br>'+esc(pick.address);send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
       })}
   find.onclick=()=>{if(!items.length)return alert('Add at least one file to print');if(items.some(it=>!it.b64))return alert('Still reading a file — one sec');note.textContent='Locating…';
     if(!navigator.geolocation){query(null);return}
@@ -109,14 +127,14 @@ function customerPage(preShop) {
       ()=>{if(done)return;done=true;clearTimeout(t);note.textContent='Using approximate location…';query(null)},{enableHighAccuracy:true,timeout:6000})};
   var PRE=%PRESHOP%;
   if(PRE){pick=PRE;document.getElementById('note').textContent='Sending to '+PRE.name;shops.style.display='none';
-    var pk=document.getElementById('pick');if(pk)pk.innerHTML='<b>'+PRE.name+'</b><br>'+(PRE.address||'');send.style.display='block';
+    var pk=document.getElementById('pick');if(pk)pk.innerHTML='<b>'+esc(PRE.name)+'</b><br>'+esc(PRE.address||'');send.style.display='block';
     find.textContent='Choose files, then send'; find.onclick=()=>{if(!items.length)return alert('Add a file');send.scrollIntoView({behavior:'smooth'})};}
-  go.onclick=()=>{if(!pick)return;result.innerHTML='Sending…';
-    fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,name:cname.value,email:cemail.value,items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
-      if(d.pending)result.innerHTML='<div class=job style=background:#fff7e0><b>Check your email.</b><br>We sent a confirmation link to <b>'+d.email+'</b>. Tap it to release your '+d.count+' file'+(d.count>1?'s':'')+' to '+pick.name+' — your pickup code appears right after. (Look in spam if it is not there in a minute.)</div>';
-      else if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent '+d.count+' file'+(d.count>1?'s':'')+' to '+pick.name+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
+  go.onclick=()=>{if(!pick)return;if(!document.getElementById('agree').checked){result.innerHTML='Please agree to the Terms of Use first.';return;}result.innerHTML='Sending…';
+    fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,name:cname.value,email:cemail.value,agree:true,terms_version:'${legal.VERSION}',items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
+      if(d.pending)result.innerHTML='<div class=job style=background:#fff7e0><b>Check your email.</b><br>We sent a confirmation link to <b>'+esc(d.email)+'</b>. Tap it to release your '+Number(d.count)+' file'+(d.count>1?'s':'')+' to '+esc(pick.name)+' — your pickup code appears right after. (Look in spam if it is not there in a minute.)</div>';
+      else if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent '+Number(d.count)+' file'+(d.count>1?'s':'')+' to '+esc(pick.name)+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
       else result.innerHTML='Error: '+(d.error||'failed')})};
-  </script>`.replace('%PRESHOP%', preShop ? JSON.stringify({id:preShop.id,name:preShop.name,address:preShop.address}) : 'null'));
+  </script>`.replace('%PRESHOP%', preShop ? scriptJSON({id:preShop.id,name:preShop.name,address:preShop.address}) : 'null'));
 }
 
 const MAIL_DOMAIN = process.env.PRINTAT_MAIL_DOMAIN || new URL(BASE).hostname.replace(/^www\./, '');
@@ -124,6 +142,8 @@ const INBOUND_SECRET = process.env.INBOUND_SECRET || '';
 const ADMIN_SECRET = process.env.PRINTAT_ADMIN_SECRET || '';
 const LATEST = { at: 0, data: null };
 const FALLBACK_INBOX = process.env.PRINTAT_INBOX || '';
+const clientIp = req => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '';
+const AGREE_HTML = `<label class=check style="display:flex;gap:8px;align-items:flex-start;font-family:Bitter;text-transform:none;letter-spacing:0;font-size:14px;margin-top:12px"><input type=checkbox name=agree value=1 required style="width:auto;margin-top:3px"> <span>I agree to the <a href="/terms" target=_blank>Terms of Use</a> and acknowledge the <a href="/privacy" target=_blank>Privacy Policy</a>.</span></label>`;
 const replyAddr = (kind, ref) => `${kind}-${String(ref).toLowerCase()}@${MAIL_DOMAIN}`;
 // ---- support: match a question / bug report to the FAQ with Jev; escalate when unsure ----
 async function triage(text) {
@@ -196,14 +216,14 @@ async function fileTicket(b, source) {
 // anything left after 7 days. Bug-report screenshots go after 30 days. Runs hourly.
 function purgeJobFiles(jobs) {
   let n = 0;
-  for (const j of jobs) { try { if (j.filepath && fs.existsSync(j.filepath)) fs.unlinkSync(j.filepath); } catch (e) { console.error('purge:', e.message); } db.clearJobFile(j.id); n++; }
+  for (const j of jobs) { try { if (j.filepath) fs.unlinkSync(j.filepath); db.clearJobFile(j.id); n++; } catch (e) { if (e.code === 'ENOENT') { db.clearJobFile(j.id); n++; } else console.error('purge:', j.filepath, e.message); } }
   return n;
 }
 function sweep() {
   try {
     const now = Date.now();
     const n = purgeJobFiles(db.filesToPurge(now));
-    let t = 0; for (const r of db.oldTickets(now)) { try { if (fs.existsSync(r.screenshot)) fs.unlinkSync(r.screenshot); } catch {} db.clearTicketShot(r.id); t++; }
+    let t = 0; for (const r of db.oldTickets(now)) { try { fs.unlinkSync(r.screenshot); db.clearTicketShot(r.id); t++; } catch (e) { if (e.code === 'ENOENT') { db.clearTicketShot(r.id); t++; } } }
     if (n || t) console.log(`sweep: removed ${n} job file(s), ${t} screenshot(s)`);
   } catch (e) { console.error('sweep:', e.message); }
 }
@@ -251,15 +271,18 @@ const server = http.createServer(async (req, res) => {
       if (!g.length) return json(res, 404, { error: 'no job for that code' });
       const shop = db.shopById(g[0].shop_id);
       return json(res, 200, { pickup_code: g[0].pickup_code, shop: shop ? shop.name : '', address: shop ? shop.address : '',
-        files: g.map(j => ({ filename: j.filename, copies: j.copies, color: !!j.color, status: j.status })),
+        files: g.map(j => ({ copies: j.copies, color: !!j.color, status: j.status })),
         status: g.every(j => j.status === 'done') ? 'done' : g.some(j => j.status !== 'queued') ? 'in_progress' : 'queued' });
     }
     // customer: send a job
     if (req.method === 'POST' && url === '/api/send') {
-      const b = JSON.parse((await body(req)).toString() || '{}');
+      if (limited('send:' + clientIp(req), 20, 3600e3)) return json(res, 429, { error: 'too many uploads; try again later' });
+      const b = JSON.parse((await body(req, BIG)).toString() || '{}');
       const shop = db.shopById(Number(b.shop_id)); if (!shop) return json(res, 404, { error: 'shop not found' });
       const email = String(b.email || '').trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, 400, { error: 'a valid email is required — we send your pickup code there' });
+      if (!b.agree) return json(res, 400, { error: 'please agree to the Terms of Use' });
+      db.recordConsent(email, 'portal', b.terms_version || legal.VERSION, clientIp(req));
       const items = (b.items && b.items.length) ? b.items : [{ filename: b.filename, fileB64: b.fileB64, copies: b.copies, color: b.color }];
       const saved = [];
       for (const it of items) {
@@ -296,25 +319,42 @@ const server = http.createServer(async (req, res) => {
     // The open-source driver links this Mac so it can dispatch through the cloud.
     if (req.method === 'POST' && url === '/api/device/start') {
       const b = JSON.parse((await body(req)).toString() || '{}');
-      if (!b.email || !String(b.email).includes('@')) return json(res, 400, { error: 'valid email required' });
+      if (!b.email || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(String(b.email))) return json(res, 400, { error: 'valid email required' });
+      if (limited('devstart:' + clientIp(req), 10, 3600e3) || limited('devstart:' + String(b.email).toLowerCase(), 5, 3600e3)) return json(res, 429, { error: 'too many attempts; try again in an hour' });
       const { poll, magic } = db.makeDevicePoll(b.email, b.name, b.device);
       mail(b.email, 'Connect your Mac to Print@',
-        `You (or the Print@ driver on "${b.device || 'your Mac'}") asked to connect to Print@.\n\nConfirm this device:\n${BASE}/device/confirm?c=${magic}\n\nAfter you confirm, your Mac will print through Print@ — no email setup, Print@ Network shops, pickup codes. This link expires in 15 minutes. If you didn't request it, ignore this email.`);
+        `You (or the Print@ driver on "${b.device || 'your Mac'}") asked to connect to Print@.\n\nConfirm this device (by confirming you agree to the Terms of Use, ${BASE}/terms, and acknowledge the Privacy Policy, ${BASE}/privacy):\n${BASE}/device/confirm?c=${magic}\n\nAfter you confirm, your Mac will print through Print@ — no email setup, Print@ Network shops, pickup codes. This link expires in 15 minutes. If you didn't request it, ignore this email.`);
       return json(res, 200, { poll });
     }
     if (req.method === 'GET' && url === '/device/confirm') {
+      const pending = db.pollByMagic(q.c);
+      if (!pending) return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Link expired', `<div class=head><h1>PRINT<span class=at>@</span></h1></div><div class=card><p>That link expired or was already used. Run <b>printat connect</b> on your Mac again.</p></div>`));
+      return res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' }), res.end(page('Connect this Mac', `<div class=head><h1>PRINT<span class=at>@</span></h1></div>
+        <div class=card><div class=lab>Connect this Mac?</div><p><b>${esc(pending.device || 'A Mac')}</b> asked to connect to Print@ as <b>${esc(pending.email)}</b>. If that wasn't you, close this page.</p>
+        <form method=post action="/device/confirm"><input type=hidden name=c value="${esc(q.c)}">${AGREE_HTML}<button class=btn red>Connect this Mac</button></form></div>`));
+    }
+    if (req.method === 'POST' && url === '/device/confirm') {
+      const f = await form(req); q.c = f.c;
+      if (!f.agree) return res.writeHead(400, { 'Content-Type': 'text/html' }), res.end(page('Terms', `<div class=wrap><p>Please agree to the Terms of Use to connect. <a href="javascript:history.back()">Go back</a></p></div>`));
       const row = db.confirmDevicePoll(q.c);
       if (!row) return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Link expired', `<div class=head><h1>PRINT<span class=at>@</span></h1></div><div class=card><p>That link expired or was already used. Run <b>printat connect</b> on your Mac again.</p></div>`));
+      db.recordConsent(row.email, 'device', legal.VERSION, clientIp(req));
       return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Device connected', `<div class=head><h1>PRINT<span class=at>@</span></h1></div>
         <div class=card><div class=lab>Connected</div><p><b>${esc(row.device || 'Your Mac')}</b> is now linked to Print@ as <b>${esc(row.email)}</b>.</p>
+        <p class=muted>By connecting you agree to the <a href="/terms">Terms of Use</a> and <a href="/privacy">Privacy Policy</a>.</p>
         <p class=muted>Return to your Mac — the driver will pick this up in a few seconds. From now on your print jobs dispatch through Print@: sent from a Print@ address, Print@ Network shops with pickup codes, nothing to configure locally.</p></div>`));
     }
     if (req.method === 'GET' && url === '/api/device/poll') {
       const row = db.pollById(q.poll);
       if (!row) return json(res, 404, { error: 'unknown poll' });
-      if (row.device_token) return json(res, 200, { status: 'ok', device_token: row.device_token, email: row.email });
+      if (row.device_token) { db.consumePoll(q.poll); res.setHeader('Cache-Control', 'no-store'); return json(res, 200, { status: 'ok', device_token: row.device_token, email: row.email }); }
       if (row.expires < Date.now()) return json(res, 200, { status: 'expired' });
       return json(res, 200, { status: 'pending' });
+    }
+    if (req.method === 'POST' && url === '/api/device/revoke') {
+      const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (db.device(auth)) db.deleteDevice(auth);
+      return json(res, 200, { ok: true });
     }
     // Driver dispatches a directory job (chain/library/PrinterOn/PrintMe) THROUGH the cloud:
     // the email is sent from printat.co, not the user's inbox, and the job is logged.
@@ -322,14 +362,18 @@ const server = http.createServer(async (req, res) => {
       const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       const dev = db.device(auth);
       if (!dev) return json(res, 401, { error: 'connect this device: run "printat connect"' });
-      const b = JSON.parse((await body(req)).toString() || '{}');
+      const b = JSON.parse((await body(req, BIG)).toString() || '{}');
       if (!b.to || !b.fileB64) return json(res, 400, { error: 'to and fileB64 required' });
-      const ref = 'PA-' + db.rid(4).toUpperCase();
+      if (limited('dispatch:' + auth, 40, 3600e3)) return json(res, 429, { error: 'too many orders from this device this hour' });
+      if (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(String(b.to)) || (b.cc && !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(String(b.cc)))) return json(res, 400, { error: 'invalid recipient' });
+      if (String(b.fileB64).length > 25e6) return json(res, 413, { error: 'file too large' });
+      const ref = 'PA-' + db.rid(6).toUpperCase();
+      db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref, status: 'sending' });
       try {
         await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Just reply to this email and it reaches them.`,
           { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: Buffer.from(b.fileB64, 'base64') }, replyAddr('job', ref));
-      } catch (e) { return json(res, 502, { error: 'send failed: ' + e.message }); }
-      db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref });
+      } catch (e) { db.setDispatchStatus(ref, 'failed'); return json(res, 502, { error: 'send failed: ' + e.message }); }
+      db.setDispatchStatus(ref, 'sent');
       return json(res, 200, { ok: true, ref });
     }
 
@@ -342,7 +386,7 @@ const server = http.createServer(async (req, res) => {
       if (!ADMIN_SECRET || req.headers['x-printat-admin'] !== ADMIN_SECRET) return json(res, 401, { error: 'bad secret' });
       const name = url.slice('/api/admin/directory/'.length).replace(/[^a-z0-9-]/g, '');
       if (!name) return json(res, 400, { error: 'name' });
-      const buf = await body(req);
+      const buf = await body(req, BIG);
       try { JSON.parse(buf.toString('utf8')); } catch { return json(res, 400, { error: 'not JSON' }); }
       fs.mkdirSync(DIRECTORY_DIR, { recursive: true });
       const file = path.join(DIRECTORY_DIR, name + '.json');
@@ -359,31 +403,44 @@ const server = http.createServer(async (req, res) => {
       return res.end(fs.readFileSync(file));
     }
 
+    // ---- LEGAL ----
+    if (req.method === 'GET' && (url === '/terms' || url === '/privacy')) {
+      const body_ = url === '/terms' ? legal.TERMS : legal.PRIVACY;
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(page(url === '/terms' ? 'Print@™ Terms of Use' : 'Print@™ Privacy Policy', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/">Home</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a></span></div><style>h2{margin-top:18px}h3{font-family:"Oswald";text-transform:uppercase;letter-spacing:1px;font-size:15px;margin:18px 0 6px}p,li{line-height:1.5}ul{padding-left:20px}</style>${body_}<p class=muted style="margin-top:24px"><a href="/terms">Terms of Use</a> &middot; <a href="/privacy">Privacy Policy</a> &middot; <a href="/help">Help</a></p>`));
+    }
+
     // ---- SUPPORT ----
     if (req.method === 'GET' && url === '/help') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(helpPage()); }
     if (req.method === 'POST' && url === '/api/help/ask') {
+      if (limited('ask:' + clientIp(req), 30, 3600e3)) return json(res, 429, { error: 'slow down' });
       const b = JSON.parse((await body(req)).toString() || '{}');
       const t = await triage(String(b.q || ''));
       return json(res, 200, t.faq ? { answer: t.faq.answer, title: t.faq.title, id: t.faq.id, confidence: t.confidence } : { answer: null, confidence: t.confidence });
     }
     if (req.method === 'POST' && url === '/api/bugs') {
-      const b = JSON.parse((await body(req)).toString() || '{}');
+      if (limited('bugs:' + clientIp(req), 10, 3600e3)) return json(res, 429, { error: 'too many reports; try again later' });
+      const b = JSON.parse((await body(req, BIG)).toString() || '{}');
       const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       const dev = auth ? db.device(auth) : null;
       if (dev && !b.email) b.email = dev.email;
       const r = await fileTicket(b, b.source || (dev ? 'driver' : 'web'));
       return json(res, r.error ? 400 : 200, r);
     }
+    const adminOk = () => ADMIN_SECRET && (cookies(req).pa_admin === ADMIN_SECRET || q.key === ADMIN_SECRET);
     if (req.method === 'GET' && url === '/admin/bugs') {
-      if (!ADMIN_SECRET || q.key !== ADMIN_SECRET) return json(res, 401, { error: 'bad key' });
+      if (!adminOk()) return json(res, 401, { error: 'bad key' });
+      if (q.key) { res.writeHead(303, { Location: '/admin/bugs', 'Set-Cookie': `pa_admin=${encodeURIComponent(ADMIN_SECRET)}; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=28800` }); return res.end(); }
+      res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer');
       const rows = db.tickets();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }), res.end(page('Print@ tickets', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag>tickets</span></div>` + rows.map(r => `<div class=job><div class=head><b>#${r.id} ${esc(r.email)}</b> <span class="pill ${r.status === 'open' ? 'queued' : 'done'}">${esc(r.status)}</span></div><div class=m>${new Date(r.created).toISOString().slice(0, 16)} · ${esc(r.source)} · ${esc(r.category)}${r.faq_id ? ' · ' + esc(r.faq_id) + ' ' + (r.faq_confidence || 0).toFixed(2) : ''}</div><div style="margin-top:6px">${esc(r.description)}</div><div class=m><a href="/admin/bugs/${r.id}?key=${esc(q.key)}">details</a></div></div>`).join('') || '<p>No tickets.</p>'));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }), res.end(page('Print@ tickets', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag>tickets</span></div>` + rows.map(r => `<div class=job><div class=head><b>#${r.id} ${esc(r.email)}</b> <span class="pill ${r.status === 'open' ? 'queued' : 'done'}">${esc(r.status)}</span></div><div class=m>${new Date(r.created).toISOString().slice(0, 16)} · ${esc(r.source)} · ${esc(r.category)}${r.faq_id ? ' · ' + esc(r.faq_id) + ' ' + (r.faq_confidence || 0).toFixed(2) : ''}</div><div style="margin-top:6px">${esc(r.description)}</div><div class=m><a href="/admin/bugs/${r.id}">details</a></div></div>`).join('') || '<p>No tickets.</p>'));
     }
     if (req.method === 'GET' && /^\/admin\/bugs\/\d+$/.test(url)) {
-      if (!ADMIN_SECRET || q.key !== ADMIN_SECRET) return json(res, 401, { error: 'bad key' });
+      if (!adminOk()) return json(res, 401, { error: 'bad key' });
+      res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer');
       const t = db.ticket(Number(url.split('/')[3])); if (!t) return json(res, 404, { error: 'no ticket' });
       if (q.shot && t.screenshot && fs.existsSync(t.screenshot)) { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(t.screenshot)); }
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }), res.end(page(`Ticket #${t.id}`, `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/admin/bugs?key=${esc(q.key)}">« tickets</a></span></div><div class=card><div class=lab>#${t.id} · ${esc(t.status)} · ${esc(t.category)} · ${esc(t.source)}</div><p><b>${esc(t.email)}</b> · ${new Date(t.created).toISOString()}</p><pre style="white-space:pre-wrap">${esc(t.description)}</pre>${t.screenshot ? `<img src="/admin/bugs/${t.id}?key=${esc(q.key)}&shot=1" style="max-width:100%;border:2px solid var(--ink)">` : ''}<details><summary>diagnostics</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(t.diagnostics)}</pre></details></div>`));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }), res.end(page(`Ticket #${t.id}`, `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/admin/bugs">« tickets</a></span></div><div class=card><div class=lab>#${t.id} · ${esc(t.status)} · ${esc(t.category)} · ${esc(t.source)}</div><p><b>${esc(t.email)}</b> · ${new Date(t.created).toISOString()}</p><pre style="white-space:pre-wrap">${esc(t.description)}</pre>${t.screenshot ? `<img src="/admin/bugs/${t.id}?shot=1" style="max-width:100%;border:2px solid var(--ink)">` : ''}<details><summary>diagnostics</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(t.diagnostics)}</pre></details></div>`));
     }
 
     // Latest driver version for the update check (tip of main on GitHub, cached 10 min).
@@ -430,14 +487,15 @@ const server = http.createServer(async (req, res) => {
       if (!db.device(auth)) return json(res, 401, { error: 'connect this device' });
       const b = JSON.parse((await body(req)).toString() || '{}');
       let n = 0;
-      for (const f of (b.facts || []).slice(0, 40)) { if (f && f.key && f.submit && f.submit.method) { db.upsertFact({ ...f, source: 'driver:' + (f.source || 'unknown'), confidence: 0.75 }); n++; } }
+      for (const f of (b.facts || []).slice(0, 40)) { if (f && f.key && f.submit && f.submit.method) { if (db.upsertFactProposal({ ...f, source: 'driver:' + (f.source || 'unknown'), confidence: 0.6 })) n++; } }
       return json(res, 200, { ok: true, stored: n });
     }
     if (req.method === 'POST' && url === '/api/shopfacts/outcome') {
       const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       if (!db.device(auth)) return json(res, 401, { error: 'connect this device' });
       const b = JSON.parse((await body(req)).toString() || '{}');
-      if (b.key && b.outcome) db.recordOutcome(String(b.key), String(b.outcome).slice(0, 20));
+      // Only a dispatch this device actually made through us counts as evidence.
+      if (b.key && b.outcome) { const f = db.factsFor([String(b.key)])[String(b.key)]; if (f && f.email && db.dispatchProof(auth, f.email)) db.recordOutcome(String(b.key), String(b.outcome).slice(0, 20)); }
       return json(res, 200, { ok: true });
     }
 
@@ -455,14 +513,16 @@ const server = http.createServer(async (req, res) => {
       if (kind === 'job') { const d = db.dispatchByRef(ref); if (d) { customer = d.email; shop = d.to_email; shopName = d.shop_name || d.to_email; db.setDispatchStatus(d.ref, 'replied'); } }
       else if (kind === 'order') { const j = db.jobsByCode(ref)[0]; if (j) { const s = db.shopById(j.shop_id); customer = j.customer_email; shop = s ? s.email : ''; shopName = s ? s.name : ''; } }
       const fromCustomer = customer && from === customer.toLowerCase();
-      const dest = fromCustomer ? shop : customer;
+      const fromShop = shop && (from === shop.toLowerCase() || (from.split('@')[1] && from.split('@')[1] === shop.toLowerCase().split('@')[1]));
+      const dest = fromCustomer ? shop : fromShop ? customer : ''; // anyone else: unmatched, goes to a human
       db.logReply({ kind, ref, from_email: m.from, to_email: m.to, forwarded_to: dest || FALLBACK_INBOX, subject: m.subject, text });
       if (!dest) {
         if (FALLBACK_INBOX) mail(FALLBACK_INBOX, `[Print@ unmatched] ${m.subject || '(no subject)'}`, `To: ${m.to}\nFrom: ${who}\n\n${text}`);
         return json(res, 200, { relayed: false });
       }
       const intro = fromCustomer ? `${who} (the customer) replied about print order ${ref.toUpperCase()}:` : `${shopName || who} replied about your print order ${ref.toUpperCase()}:`;
-      await mail(dest, `Re: ${(m.subject || 'Print order ' + ref.toUpperCase()).replace(/^(re:\s*)+/i, '')}`, `${intro}\n\n${text}\n\n— Relayed by Print@. Reply to this email to answer.`, m.to);
+      const ok = await mail(dest, `Re: ${(m.subject || 'Print order ' + ref.toUpperCase()).replace(/^(re:\s*)+/i, '')}`, `${intro}\n\n${text}\n\n— Relayed by Print@. Reply to this email to answer.`, m.to);
+      if (!ok) return json(res, 502, { relayed: false, error: 'relay send failed' }); // Worker then forwards to the fallback inbox
       return json(res, 200, { relayed: true, to: fromCustomer ? 'shop' : 'customer' });
     }
 
@@ -474,7 +534,7 @@ const server = http.createServer(async (req, res) => {
 
     // GUEST JOIN — scan a QR, unlock a shop account instantly, then finish signup.
     if (req.method === 'GET' && url === '/join') {
-      return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Become a Print@™ shop', `
+      return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Become a Print@™ shop', `<!-- terms --><div class=muted style="margin:8px 0 0">By listing a shop you agree to the <a href="/terms">Terms of Use</a> and <a href="/privacy">Privacy Policy</a>.</div>
         <div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag>Guest signup</span></div>
         <h2>Turn your shop printer into profit</h2>
         <p class=muted>Customers and sales from a machine you already own. People nearby send print jobs, you print them from this page (no software, no kiosk), they come in to pick up. You keep the fee and the foot traffic.</p>
@@ -488,6 +548,7 @@ const server = http.createServer(async (req, res) => {
           <input type=hidden name=lat id=lat><input type=hidden name=lon id=lon>
           <label>Hours<input name=hours placeholder="Mon-Sat 8am-6pm"></label>
           <div class=row><div><label>B&W $/page<input name=price_bw placeholder="$0.15"></label></div><div><label>Color $/page<input name=price_color placeholder="$0.75"></label></div></div>
+          ${AGREE_HTML}
           <button class=btn red>Create my shop</button>
           <p class=muted style=margin-top:8px id=geo>Getting your location…</p>
         </form>
@@ -495,7 +556,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url === '/join') {
       const f = await form(req);
+      if (!f.agree) return res.writeHead(400, { 'Content-Type': 'text/html' }), res.end(page('Terms', `<div class=wrap><p>Please agree to the <a href="/terms">Terms of Use</a> to list a shop. <a href="javascript:history.back()">Go back</a></p></div>`));
+      db.recordConsent(f.email, 'shop', legal.VERSION, clientIp(req));
       let shop = db.shopByEmail(f.email);
+      if (shop) {
+        // Existing shop: never hand out a session from a signup form. Email a login link instead.
+        if (!limited('login:' + String(f.email).toLowerCase(), 5, 3600e3)) { const t = db.makeToken(f.email, 'login'); mail(f.email, 'Your Print@ login link', `Log in to your Print@ shop:\n${BASE}/shop/auth?token=${t}\n\nExpires in 30 minutes.`); }
+        return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Check your email', `<div class=wrap><h1>PRINT<span class=at>@</span></h1><div class=card><div class=lab>That shop already exists</div><p>We emailed a login link to <b>${esc(f.email)}</b>.</p></div></div>`));
+      }
       if (!shop) {
         const id = db.createShop({ name: f.name, email: f.email, address: f.address, city: f.city, state: f.state, lat: f.lat ? Number(f.lat) : null, lon: f.lon ? Number(f.lon) : null, hours: f.hours, price_bw: f.price_bw, price_color: f.price_color, color: 1, notes: '' });
         shop = db.shopById(id);
@@ -504,7 +572,7 @@ const server = http.createServer(async (req, res) => {
       const sTok = db.makeSession(shop.id);
       const vTok = db.makeToken(f.email, 'verify');
       mail(f.email, 'Verify your Print@ shop to go live', `Welcome, ${f.name}! Your shop is set up.\n\nVerify your email so customers can find you:\n${BASE}/shop/auth?token=${vTok}\n\nYou can already open your queue: ${BASE}/shop/dashboard`);
-      res.writeHead(303, { 'Set-Cookie': `pn=${sTok}; HttpOnly; SameSite=Lax; Max-Age=${30 * 864e2}; Path=/`, Location: '/shop/dashboard' });
+      res.writeHead(303, { 'Set-Cookie': `pn=${sTok}; HttpOnly; SameSite=Lax; Secure; Max-Age=${30 * 864e2}; Path=/`, Location: '/shop/dashboard' });
       return res.end();
     }
 
@@ -524,12 +592,14 @@ const server = http.createServer(async (req, res) => {
         <label>Hours<input name=hours placeholder="Mon–Sat 7am–6pm"></label>
         <div class=row><div><label>B&W price/page<input name=price_bw placeholder="$0.15"></label></div><div><label>Color price/page<input name=price_color placeholder="$0.75"></label></div></div>
         <label>Notes for customers<input name=notes placeholder="Ask at the counter"></label>
-        <button class=btn red>Create shop &amp; verify email</button>
+        ${AGREE_HTML}<button class=btn red>Create shop &amp; verify email</button>
         <p class=muted style=margin-top:8px>Tip: leave lat/long blank and <a href="#" onclick="navigator.geolocation.getCurrentPosition(p=>{document.querySelector('[name=lat]').value=p.coords.latitude.toFixed(5);document.querySelector('[name=lon]').value=p.coords.longitude.toFixed(5)});return false">use my current location</a> while standing in the shop.</p>
       </form></div>`));
 
     if (req.method === 'POST' && url === '/shop/signup') {
       const f = await form(req);
+      if (!f.agree) return res.writeHead(400, { 'Content-Type': 'text/html' }), res.end(page('Terms', `<div class=wrap><p>Please agree to the <a href="/terms">Terms of Use</a> to sign up. <a href="javascript:history.back()">Go back</a></p></div>`));
+      db.recordConsent(f.email, 'shop', legal.VERSION, clientIp(req));
       if (db.shopByEmail(f.email)) return redirect(res, '/shop?err=exists');
       const id = db.createShop({ name: f.name, email: f.email, address: f.address, city: f.city, state: f.state, lat: f.lat ? Number(f.lat) : null, lon: f.lon ? Number(f.lon) : null, hours: f.hours, price_bw: f.price_bw, price_color: f.price_color, color: 1, notes: f.notes });
       const t = db.makeToken(f.email, 'verify');
@@ -543,10 +613,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url === '/shop/auth') {
       const row = db.useToken(q.token); if (!row) return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Link expired', `<div class=wrap><h1>PRINT<span class=at>@</span></h1><div class=card><p>That link expired or was already used. <a href=/shop>Request a new one</a>.</p></div></div>`));
+      if (row.purpose !== 'login' && row.purpose !== 'verify') return redirect(res, '/shop');
       const shop = db.shopByEmail(row.email); if (!shop) return redirect(res, '/shop');
       if (row.purpose === 'verify') db.verifyShop(shop.id);
       const s = db.makeSession(shop.id);
-      res.writeHead(303, { 'Set-Cookie': `pn=${s}; HttpOnly; SameSite=Lax; Max-Age=${30 * 864e2}; Path=/`, Location: '/shop/dashboard' }); return res.end();
+      res.writeHead(303, { 'Set-Cookie': `pn=${s}; HttpOnly; SameSite=Lax; Secure; Max-Age=${30 * 864e2}; Path=/`, Location: '/shop/dashboard' }); return res.end();
     }
 
     // shop dashboard (auth required)
@@ -559,7 +630,7 @@ const server = http.createServer(async (req, res) => {
         let found = codeIn ? db.jobsByCode(codeIn) : [];
         const files = found.map(j => { const sh = db.shopById(j.shop_id); return `<div class=m style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
           <span>${esc(j.filename)} · ${j.copies} cop${j.copies===1?'y':'ies'} · ${j.color?'color':'B&W'} · <i>sent to ${esc(sh?sh.name:'?')}</i></span>
-          <a class=btn href="/shop/anyfile/${j.id}" target=_blank style="display:inline-block;width:auto;padding:5px 12px;margin:0;font-size:12px">Print</a></div>`; }).join('');
+          <a class=btn href="/shop/anyfile/${j.id}?code=${esc(codeIn)}" target=_blank style="display:inline-block;width:auto;padding:5px 12px;margin:0;font-size:12px">Print</a></div>`; }).join('');
         return res.writeHead(200,{'Content-Type':'text/html'}), res.end(page('Look up a job', `
           <div class=head><h1>PRINT<span class=at>@</span></h1><a class=tag href=/shop/dashboard>« Queue</a></div>
           <h2>Pull up a job by code</h2>
@@ -568,13 +639,17 @@ const server = http.createServer(async (req, res) => {
           ${codeIn ? (found.length ? `<div class=card><div class=lab>Code ${esc(codeIn)} — ${found.length} file${found.length>1?'s':''}</div>${files}<form method=post action="/shop/code/${esc(codeIn)}/done" style=margin-top:10px><button class=btn style="padding:8px 16px;background:#2e7d4f;border-color:#2e7d4f;box-shadow:4px 4px 0 #1c4a2f">Mark picked up</button></form></div>` : '<div class=card><p class=muted>No job found for that code.</p></div>') : ''}`));
       }
       if (req.method === 'GET' && url.startsWith('/shop/anyfile/')) {
-        const j = db.jobById(Number(url.split('/')[3])); if (!j) return res.writeHead(404).end();
+        const j = db.jobById(Number(url.split('/')[3]));
+        // Cross-shop pickup by code: the code is the customer's authorization. No code, no file.
+        if (!j || j.status === 'pending' || !q.code || String(q.code) !== String(j.pickup_code)) return res.writeHead(404).end();
         if (!j.filepath || !fs.existsSync(j.filepath)) return res.writeHead(410, { 'Content-Type': 'text/html' }), res.end(page('File removed', '<div class=wrap><p>This document was deleted from Print@ after the order was completed.</p></div>'));
         const buf = fs.readFileSync(j.filepath); res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${j.filename}"`}); return res.end(buf);
       }
       if (req.method === 'POST' && /\/shop\/code\/\w+\/done/.test(url)) {
-        const pc = url.split('/')[3]; const g = db.jobsByCode(pc);
+        const pc = url.split('/')[3]; const g = db.jobsByCode(pc).filter(j => j.status !== 'pending' && j.status !== 'done');
+        if (!g.length) return redirect(res, '/shop/lookup?code=' + encodeURIComponent(pc));
         for (const j of g) db.setJobStatus(j.id, 'done');
+        purgeJobFiles(g);
         const first = g[0];
         if (first && first.customer_email) mail(first.customer_email, `Your Print@ job is printed`, `Your ${g.length} file${g.length>1?'s were':' was'} printed and picked up.\n\nRate the shop: ${BASE}/rate/${first.rate_token}`);
         return redirect(res, '/shop/lookup?code=' + encodeURIComponent(pc));

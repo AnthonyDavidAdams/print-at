@@ -12,12 +12,33 @@ const SKIP = /yelp\.|facebook\.|instagram\.|google\.|mapquest|yellowpages|bbb\.o
 
 function enabled() { return !!KEY; }
 
-async function fetchText(url, ms = 9000) {
-  const r = await fetch(url, { headers: { 'user-agent': UA, accept: 'text/html,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(ms) });
+// Only public HTTP(S) hosts: no private/loopback/link-local/metadata addresses, no credentials,
+// redirects followed by hand and re-checked at every hop, body read with a hard byte cap.
+const dns = require('dns').promises; const net = require('net');
+function privateIp(ip) {
+  if (net.isIPv4(ip)) { const [a, b] = ip.split('.').map(Number); return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224; }
+  const v6 = ip.toLowerCase(); return v6 === '::1' || v6 === '::' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80') || v6.startsWith('::ffff:');
+}
+async function checkUrl(url) {
+  let u; try { u = new URL(url); } catch { throw new Error('bad url'); }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password) throw new Error('url not allowed');
+  if (u.port && !['', '80', '443'].includes(u.port)) throw new Error('port not allowed');
+  if (net.isIP(u.hostname) ? privateIp(u.hostname) : /^(localhost|.*\.local|.*\.internal|.*\.railway\.internal)$/i.test(u.hostname)) throw new Error('host not allowed');
+  const addrs = await dns.lookup(u.hostname, { all: true }).catch(() => []);
+  if (!addrs.length || addrs.some(a => privateIp(a.address))) throw new Error('host not allowed');
+  return u;
+}
+async function fetchText(url, ms = 9000, hops = 0) {
+  const u = await checkUrl(url);
+  const r = await fetch(u.toString(), { headers: { 'user-agent': UA, accept: 'text/html,*/*' }, redirect: 'manual', signal: AbortSignal.timeout(ms) });
+  if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { if (hops >= 3) throw new Error('too many redirects'); return fetchText(new URL(r.headers.get('location'), u).toString(), ms, hops + 1); }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const ct = r.headers.get('content-type') || '';
   if (!/html|text/i.test(ct)) throw new Error('not html');
-  const buf = Buffer.from(await r.arrayBuffer()); return buf.subarray(0, 400000).toString('utf8');
+  const reader = r.body.getReader(); const chunks = []; let n = 0;
+  while (n < 400000) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); n += value.length; }
+  try { await reader.cancel(); } catch {}
+  return Buffer.concat(chunks).subarray(0, 400000).toString('utf8');
 }
 function stripHtml(html) {
   return html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!--[\s\S]*?-->/gi, ' ').replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>|<\/h\d>|<\/tr>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
