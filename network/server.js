@@ -118,6 +118,7 @@ function customerPage(preShop) {
 
 const MAIL_DOMAIN = process.env.PRINTAT_MAIL_DOMAIN || new URL(BASE).hostname.replace(/^www\./, '');
 const INBOUND_SECRET = process.env.INBOUND_SECRET || '';
+const ADMIN_SECRET = process.env.PRINTAT_ADMIN_SECRET || '';
 const FALLBACK_INBOX = process.env.PRINTAT_INBOX || '';
 const replyAddr = (kind, ref) => `${kind}-${String(ref).toLowerCase()}@${MAIL_DOMAIN}`;
 function jobListing(items) { return items.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n'); }
@@ -245,12 +246,27 @@ const server = http.createServer(async (req, res) => {
     }
 
     // The public-printer directory, for connected drivers only (this is the asset).
+    // Lives on the persistent volume (PRINTAT_NET_DIR/directory), uploaded by the
+    // maintainer with PUT /api/admin/directory/<name> (x-printat-admin: PRINTAT_ADMIN_SECRET);
+    // never in git, never in the build.
+    const DIRECTORY_DIR = path.join(db.DIR, 'directory');
+    if (req.method === 'PUT' && url.startsWith('/api/admin/directory/')) {
+      if (!ADMIN_SECRET || req.headers['x-printat-admin'] !== ADMIN_SECRET) return json(res, 401, { error: 'bad secret' });
+      const name = url.slice('/api/admin/directory/'.length).replace(/[^a-z0-9-]/g, '');
+      if (!name) return json(res, 400, { error: 'name' });
+      const buf = await body(req);
+      try { JSON.parse(buf.toString('utf8')); } catch { return json(res, 400, { error: 'not JSON' }); }
+      fs.mkdirSync(DIRECTORY_DIR, { recursive: true });
+      const file = path.join(DIRECTORY_DIR, name + '.json');
+      fs.writeFileSync(file + '.tmp', buf); fs.renameSync(file + '.tmp', file);
+      return json(res, 200, { ok: true, name, bytes: buf.length });
+    }
     if (req.method === 'GET' && url.startsWith('/api/directory/')) {
       const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       if (!db.device(auth)) return json(res, 401, { error: 'connect this device: run "printat connect"' });
       const name = url.slice('/api/directory/'.length).replace(/[^a-z0-9-]/g, '');
-      const file = path.join(__dirname, 'directory', name + '.json');
-      if (!name || !fs.existsSync(file)) return json(res, 404, { error: 'no such directory file' });
+      const file = [path.join(DIRECTORY_DIR, name + '.json'), path.join(__dirname, 'directory', name + '.json')].find(f => name && fs.existsSync(f));
+      if (!file) return json(res, 404, { error: 'no such directory file' });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', 'Last-Modified': fs.statSync(file).mtime.toUTCString() });
       return res.end(fs.readFileSync(file));
     }
