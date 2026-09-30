@@ -26,6 +26,9 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS device_polls(poll TEXT PRIMARY KEY, email TEXT, name TEXT, device TEXT, magic TEXT, device_token TEXT, expires INTEGER);
   -- Directory dispatches: jobs the driver relayed by email to a chain/library/PrinterOn/PrintMe
   -- shop (not a Print@ Network shop). Logged so we can relay replies/codes back later.
+  CREATE TABLE IF NOT EXISTS shop_facts(key TEXT PRIMARY KEY, name TEXT, address TEXT, lat REAL, lon REAL, brand TEXT,
+    method TEXT, email TEXT, url TEXT, phone TEXT, instructions TEXT, hours_today TEXT, cost_basis TEXT, est_cost_usd REAL, rating REAL,
+    source TEXT, confidence REAL DEFAULT 0.5, confirmations INTEGER DEFAULT 0, last_outcome TEXT, verified INTEGER, updated INTEGER);
   CREATE TABLE IF NOT EXISTS replies(id INTEGER PRIMARY KEY, kind TEXT, ref TEXT, from_email TEXT, to_email TEXT, forwarded_to TEXT, subject TEXT, text TEXT, created INTEGER);
   CREATE TABLE IF NOT EXISTS dispatches(id INTEGER PRIMARY KEY, device_token TEXT, email TEXT, shop_name TEXT, shop_address TEXT,
     to_email TEXT, subject TEXT, filename TEXT, ref TEXT, status TEXT DEFAULT 'sent', created INTEGER);
@@ -97,6 +100,23 @@ module.exports = {
   },
   device: t => { const r = db.prepare('SELECT * FROM devices WHERE token=?').get(t || ''); if (r) db.prepare('UPDATE devices SET last_used=? WHERE token=?').run(now(), t); return r; },
   // directory dispatches (driver relayed a job by email through the cloud)
+  // shop facts (pooled knowledge)
+  factsFor(keys) { if (!keys.length) return {}; const rows = db.prepare(`SELECT * FROM shop_facts WHERE key IN (${keys.map(() => '?').join(',')})`).all(...keys); return Object.fromEntries(rows.map(r => [r.key, r])); },
+  upsertFact(f) {
+    const cur = db.prepare('SELECT * FROM shop_facts WHERE key=?').get(f.key);
+    const sub = f.submit || {};
+    // A driver-confirmed fact beats an unconfirmed cloud guess; otherwise newest wins.
+    if (cur && cur.confirmations > 0 && (f.source === 'cloud-jev') && cur.method) return cur;
+    db.prepare(`INSERT INTO shop_facts(key,name,address,lat,lon,brand,method,email,url,phone,instructions,hours_today,cost_basis,est_cost_usd,rating,source,confidence,confirmations,last_outcome,verified,updated)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(key) DO UPDATE SET name=excluded.name, address=COALESCE(NULLIF(excluded.address,''),shop_facts.address), lat=excluded.lat, lon=excluded.lon, brand=COALESCE(NULLIF(excluded.brand,''),shop_facts.brand),
+        method=excluded.method, email=excluded.email, url=excluded.url, phone=COALESCE(NULLIF(excluded.phone,''),shop_facts.phone), instructions=excluded.instructions,
+        hours_today=COALESCE(NULLIF(excluded.hours_today,''),shop_facts.hours_today), cost_basis=COALESCE(NULLIF(excluded.cost_basis,''),shop_facts.cost_basis), est_cost_usd=COALESCE(excluded.est_cost_usd,shop_facts.est_cost_usd), rating=COALESCE(excluded.rating,shop_facts.rating),
+        source=excluded.source, confidence=excluded.confidence, verified=excluded.verified, updated=excluded.updated`)
+      .run(f.key, f.name || '', f.address || '', f.lat ?? null, f.lon ?? null, f.brand || '', sub.method || '', sub.email || '', sub.url || '', sub.phone || f.phone || '', sub.instructions || '', f.hours_today || '', f.cost_basis || '', f.est_cost_usd ?? null, f.rating ?? null, f.source || 'driver', f.confidence ?? 0.7, 0, null, now(), now());
+    return db.prepare('SELECT * FROM shop_facts WHERE key=?').get(f.key);
+  },
+  recordOutcome(key, outcome) { db.prepare("UPDATE shop_facts SET confirmations=confirmations+?, last_outcome=?, confidence=MIN(0.99, confidence+?), updated=? WHERE key=?").run(outcome === 'sent' || outcome === 'picked_up' ? 1 : 0, outcome, outcome === 'picked_up' ? 0.1 : outcome === 'sent' ? 0.05 : outcome === 'bounced' || outcome === 'failed' ? -0.3 : 0, now(), key); },
   dispatchByRef: r => db.prepare('SELECT * FROM dispatches WHERE ref=? ORDER BY id DESC').get(String(r || '').toUpperCase()),
   setDispatchStatus(ref, status) { db.prepare('UPDATE dispatches SET status=? WHERE ref=?').run(status, ref); },
   logReply(r) { db.prepare('INSERT INTO replies(kind,ref,from_email,to_email,forwarded_to,subject,text,created) VALUES(?,?,?,?,?,?,?,?)').run(r.kind, r.ref, r.from_email, r.to_email, r.forwarded_to || '', r.subject || '', (r.text || '').slice(0, 20000), now()); },

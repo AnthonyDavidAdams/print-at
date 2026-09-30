@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db');
 const mail = require('./mail');
+const shopResearch = require('./research');
 const qr = require('./qr');
 
 const PORT = process.env.PORT || 4260;
@@ -269,6 +270,49 @@ const server = http.createServer(async (req, res) => {
       if (!file) return json(res, 404, { error: 'no such directory file' });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', 'Last-Modified': fs.statSync(file).mtime.toUTCString() });
       return res.end(fs.readFileSync(file));
+    }
+
+    // ---- SHARED SHOP FACTS ----
+    // Connected drivers ask what's known about their candidates before doing any research,
+    // and report what they verified afterwards. Unknown shops get a cheap cloud research pass
+    // (Jev) once, so the first person to ever hit a shop is the last person who has to wait.
+    const factView = r => r ? { submit: { method: r.method, email: r.email || undefined, url: r.url || undefined, phone: r.phone || undefined, instructions: r.instructions || undefined },
+      hours_today: r.hours_today || '', cost_basis: r.cost_basis || '', est_cost_usd: r.est_cost_usd, rating: r.rating, confidence: r.confidence, confirmations: r.confirmations, source: r.source,
+      verified: new Date(r.verified || r.updated).toISOString().slice(0, 10) } : null;
+    if (req.method === 'POST' && url === '/api/shopfacts/lookup') {
+      const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!db.device(auth)) return json(res, 401, { error: 'connect this device: run "printat connect"' });
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      const cands = (b.candidates || []).filter(c => c && c.key).slice(0, 40);
+      const fresh = 30 * 864e5;
+      const have = db.factsFor(cands.map(c => c.key));
+      const facts = {};
+      for (const c of cands) { const r = have[c.key]; if (r && r.method && Date.now() - (r.verified || 0) < fresh * (r.confirmations ? 3 : 1)) facts[c.key] = factView(r); }
+      // Research up to 3 unknown independent shops inline (fast) and the rest in the background.
+      const unknown = cands.filter(c => !facts[c.key] && !(have[c.key] && Date.now() - (have[c.key].updated || 0) < 7 * 864e5));
+      if (shopResearch.enabled() && unknown.length) {
+        const inline = unknown.slice(0, 3), later = unknown.slice(3, 10);
+        const work = async c => { try { const f = await shopResearch.researchShop(c, m => console.log('research:', m)); if (f) { const row = db.upsertFact({ key: c.key, name: c.name, address: c.address, lat: c.lat, lon: c.lon, brand: c.brand, ...f }); return [c.key, factView(row)]; } else db.upsertFact({ key: c.key, name: c.name, address: c.address, lat: c.lat, lon: c.lon, brand: c.brand, submit: {}, source: 'cloud-jev', confidence: 0 }); } catch (e) { console.log('research failed:', c.name, e.message); } return null; };
+        const done = await Promise.race([Promise.all(inline.map(work)), new Promise(r => setTimeout(() => r([]), 14000))]);
+        for (const d of done || []) if (d) facts[d[0]] = d[1];
+        if (later.length) setImmediate(() => later.reduce((p, c) => p.then(() => work(c)), Promise.resolve()));
+      }
+      return json(res, 200, { facts, known: Object.keys(facts).length, asked: cands.length });
+    }
+    if (req.method === 'POST' && url === '/api/shopfacts') {
+      const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!db.device(auth)) return json(res, 401, { error: 'connect this device' });
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      let n = 0;
+      for (const f of (b.facts || []).slice(0, 40)) { if (f && f.key && f.submit && f.submit.method) { db.upsertFact({ ...f, source: 'driver:' + (f.source || 'unknown'), confidence: 0.75 }); n++; } }
+      return json(res, 200, { ok: true, stored: n });
+    }
+    if (req.method === 'POST' && url === '/api/shopfacts/outcome') {
+      const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!db.device(auth)) return json(res, 401, { error: 'connect this device' });
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      if (b.key && b.outcome) db.recordOutcome(String(b.key), String(b.outcome).slice(0, 20));
+      return json(res, 200, { ok: true });
     }
 
     // Inbound mail from the Email Worker: job-<ref>@ (a driver's relayed order) or

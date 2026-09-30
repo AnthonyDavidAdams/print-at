@@ -55,6 +55,16 @@ form.settings{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding
 <label>Email (shops reply here; also the sender) <input type="text" name="contactEmail" value="${esc(cfg.contactEmail)}"></label>
 <label>Phone (optional, goes in order emails) <input type="text" name="contactPhone" value="${esc(cfg.contactPhone)}"></label>
 <label>Home address (used when Location Services is off and your IP is nearby) <input type="text" name="homeAddress" value="${esc(cfg.homeAddress)}"></label>
+<label>Research brain (checks hours, prices, how each shop takes files) <select name="research">
+  <option value="auto" ${(cfg.research||'auto')==='auto'?'selected':''}>Auto (Claude Code if installed, else a key below, else none)</option>
+  <option value="claude-code" ${cfg.research==='claude-code'?'selected':''}>Claude Code on this Mac (Max plan, no key)</option>
+  <option value="anthropic" ${cfg.research==='anthropic'?'selected':''}>Anthropic API key</option>
+  <option value="openai" ${cfg.research==='openai'?'selected':''}>OpenAI API key</option>
+  <option value="none" ${cfg.research==='none'?'selected':''}>None (distance + known addresses only)</option></select></label>
+<label>Anthropic API key <input type="password" name="anthropicApiKey" value="${esc(cfg.anthropicApiKey || '')}" autocomplete="off"></label>
+<label>OpenAI API key <input type="password" name="openaiApiKey" value="${esc(cfg.openaiApiKey || '')}" autocomplete="off"></label>
+<label>Research model (blank = default) <input type="text" name="researchModel" value="${esc(cfg.researchModel || '')}" placeholder="claude-opus-5 / gpt-5"></label>
+<label class="check"><input type="checkbox" name="shareFacts" ${cfg.shareFacts !== false ? 'checked' : ''}> Share what Print@ learns about shops (hours, prices, how they take orders) with the Print@ cloud so everyone's next job is faster. Never your documents.</label>
 <label>Local-mode sender <select name="sender"><option value="mailapp" ${(cfg.sender||'mailapp')!=='smtp'?'selected':''}>Mail.app (any account you already have; no passwords)</option><option value="smtp" ${cfg.sender==='smtp'?'selected':''}>SMTP with an app password (Gmail-style)</option></select></label>
 <label>Mail.app account to send from (blank = Mail's default) <input type="text" name="mailAccount" value="${esc(cfg.mailAccount || '')}" placeholder="Jane &lt;jane@icloud.com&gt;"></label>
 <label>App password file (SMTP sender only) <input type="text" name="gmailEnv" value="${esc(cfg.gmailEnv)}"></label>
@@ -173,8 +183,9 @@ function handle(req, res, cfg) {
   const back = () => { res.writeHead(303, { Location: '/' }); res.end(); };
   if (url === '/settings') return form(req, f => {
     const cur = readJson(CONFIG_PATH, {});
-    for (const k of ['contactName', 'contactEmail', 'contactPhone', 'homeAddress', 'gmailEnv', 'claudeModel', 'sender', 'mailAccount']) if (k in f) cur[k] = (f[k] || '').trim();
+    for (const k of ['contactName', 'contactEmail', 'contactPhone', 'homeAddress', 'gmailEnv', 'claudeModel', 'sender', 'mailAccount', 'research', 'anthropicApiKey', 'openaiApiKey', 'researchModel']) if (k in f) cur[k] = (f[k] || '').trim();
     cur.ccSelf = !!f.ccSelf;
+    cur.shareFacts = !!f.shareFacts;
     if (cur.contactEmail && !cur.smtpUser) cur.smtpUser = cur.contactEmail;
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(cur, null, 2));
     log('console: settings saved');

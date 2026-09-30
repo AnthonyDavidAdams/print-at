@@ -63,4 +63,21 @@ async function dispatchEmail(cfg, { to, cc, subject, body, pdfPath, shop, meta }
   }) });
 }
 
-module.exports = { connected, startDeviceAuth, pollDevice, nearbyNetworkShops, sendNetworkJob, dispatchEmail, base };
+// ---- shared shop facts ----
+// What every connected driver has learned about shops, pooled. Lookup before research so
+// known shops skip the web; report after so the next person skips it too.
+const factKey = c => `${(c.name || '').toLowerCase().trim()}|${Number(c.lat).toFixed(3)},${Number(c.lon).toFixed(3)}`;
+async function lookupFacts(cfg, candidates) {
+  const r = await api(cfg, '/api/shopfacts/lookup', { method: 'POST', timeout: 25000,
+    body: JSON.stringify({ candidates: candidates.map(c => ({ key: factKey(c), name: c.name, address: c.address, url: c.url, phone: c.phone, lat: c.lat, lon: c.lon, brand: c.brand })) }) });
+  return r.facts || {};
+}
+async function reportFacts(cfg, facts) {
+  if (!facts.length) return;
+  return api(cfg, '/api/shopfacts', { method: 'POST', body: JSON.stringify({ facts }) });
+}
+async function reportOutcome(cfg, key, outcome) {
+  return api(cfg, '/api/shopfacts/outcome', { method: 'POST', body: JSON.stringify({ key, outcome }) });
+}
+
+module.exports = { connected, startDeviceAuth, pollDevice, nearbyNetworkShops, sendNetworkJob, dispatchEmail, base, factKey, lookupFacts, reportFacts, reportOutcome };

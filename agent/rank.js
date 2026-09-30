@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { SHOP_CACHE_PATH, log } = require('./config');
+const research = require('./research');
+const cloud = require('./cloud');
 
 const SCHEMA = {
   type: 'object',
@@ -66,9 +68,9 @@ function saveCache(cache) {
 }
 function cacheKey(c) { return `${c.name}|${c.address}`.toLowerCase(); }
 
-function buildPrompt(job, loc, candidates, cfg) {
+function buildPrompt(job, loc, candidates, cfg, cloudKnown = []) {
   const cache = loadCache();
-  const known = candidates.map(c => cache[cacheKey(c)]).filter(Boolean);
+  const known = candidates.map(c => cache[cacheKey(c)]).filter(Boolean).concat(cloudKnown);
   const now = new Date();
   const spec = job.spec;
   return `You are Print@, a dispatcher that picks the best nearby place to print a document and works out how to send it there.
@@ -87,8 +89,9 @@ ${loc.address || `${loc.lat}, ${loc.lon}`} (from ${loc.source}). Local time now:
 ## Candidates (from Apple Maps, sorted by distance)
 ${JSON.stringify(candidates, null, 1)}
 
-## Previously verified facts about some of these shops (may be stale)
+## Previously verified facts about some of these shops (from this Mac and from other Print@ users; may be stale)
 ${known.length ? JSON.stringify(known, null, 1) : 'none'}
+Shops with fresh verified facts (verified within 30 days, with a submit method) do NOT need new web research: reuse the facts and spend your lookups on the others.
 
 ## What to do
 1. Use WebSearch and WebFetch to verify, for the 4-6 most promising candidates given the priority: today's hours (are they open now?), document-printing prices for this job, realistic turnaround, and HOW TO SUBMIT a file (order email address, online upload portal, or phone/walk-in only). Prefer the shop's own website or its brand's official store page. Do not spend more than a few lookups per shop.
@@ -169,14 +172,17 @@ function runClaude(prompt, cfg, onEvent = () => {}) {
 // candidate with a known email-to-print address (chains, hotel/library printers, kiosks,
 // library print services) is still fully automatable. Those sort first, then by distance.
 function fallbackRanking(candidates) {
-  const knownEmail = c => (c.printeron && c.printeron.email) || (c.printme && c.printme.email) || (c.library_print && c.library_print.email) || c.chain_email || c.email || '';
+  const knownEmail = c => (c.known && c.known.submit && c.known.submit.method === 'email' && c.known.submit.email) || (c.printeron && c.printeron.email) || (c.printme && c.printme.email) || (c.library_print && c.library_print.email) || c.chain_email || c.email || '';
+  const knownPortal = c => (c.known && c.known.submit && c.known.submit.method === 'portal' && c.known.submit.url) || c.portal || '';
   const ranked = candidates.map(c => {
     const email = knownEmail(c);
-    const base = { id: c.id, name: c.name, address: c.address, distance_mi: c.distance_mi, open_now: null, hours_today: '', est_cost_usd: null, cost_basis: '', turnaround: '', rating: null };
-    if (email) return { ...base, score: 0.9 - Math.min(c.distance_mi || 0, 25) / 50, why: `${c.distance_mi} mi away · takes orders by email`, automatable: true,
+    const k = c.known || {};
+    const base = { id: c.id, name: c.name, address: c.address, distance_mi: c.distance_mi, open_now: null, hours_today: k.hours_today || '', est_cost_usd: k.est_cost_usd ?? null, cost_basis: k.cost_basis || '', turnaround: '', rating: k.rating ?? null };
+    if (email) return { ...base, score: 0.9 - Math.min(c.distance_mi || 0, 25) / 50, why: `${c.distance_mi} mi away · takes orders by email${k.verified ? ' (verified ' + k.verified + ')' : ''}`, automatable: true,
       submit: { method: 'email', email, instructions: 'Email the PDF; the release code or confirmation comes back to you.' } };
+    const portal = knownPortal(c);
     return { ...base, score: 0.4 - Math.min(c.distance_mi || 0, 25) / 100, why: `${c.distance_mi} mi away`, automatable: false,
-      submit: c.portal ? { method: 'portal', url: c.portal, phone: c.phone, instructions: 'Upload the PDF on the brand portal and choose this store for pickup.' }
+      submit: portal ? { method: 'portal', url: portal, phone: c.phone, instructions: 'Upload the PDF on their online ordering page and choose this store for pickup.' }
         : c.phone ? { method: 'phone', phone: c.phone, url: c.url, instructions: 'Call to ask how they accept files.' }
         : { method: 'in_person', url: c.url, instructions: 'Bring the file on a USB stick or ask at the counter.' } };
   }).sort((a, b) => b.score - a.score);
@@ -185,9 +191,23 @@ function fallbackRanking(candidates) {
 
 async function rank(job, loc, candidates, cfg, onEvent = () => {}) {
   if (!candidates.length) return { ranked: [] };
-  if (cfg.skipClaude) return fallbackRanking(candidates);
+  // Pool knowledge: ask the cloud what other drivers already verified about these shops.
+  let cloudKnown = [];
+  if (cloud.connected(cfg)) {
+    try {
+      const facts = await cloud.lookupFacts(cfg, candidates);
+      for (const c of candidates) { const f = facts[cloud.factKey(c)]; if (f) { c.known = f; cloudKnown.push({ name: c.name, address: c.address, ...f }); } }
+      if (cloudKnown.length) onEvent(`${cloudKnown.length} of ${candidates.length} places already known to Print@`);
+    } catch (e) { log(`shop facts lookup failed: ${e.message}`); }
+  }
+  const provider = cfg.skipClaude ? 'none' : research.choose(cfg);
+  if (provider === 'none') { log('ranking without research (no brain configured)'); return fallbackRanking(candidates); }
   try {
-    const data = await runClaude(buildPrompt(job, loc, candidates, cfg), cfg, onEvent);
+    const prompt = buildPrompt(job, loc, candidates, cfg, cloudKnown);
+    onEvent(`Research via ${provider === 'claude-code' ? 'Claude Code' : provider === 'anthropic' ? 'Anthropic API' : 'OpenAI API'}`);
+    const data = provider === 'anthropic' ? await research.runAnthropic(prompt, SCHEMA, cfg, onEvent)
+      : provider === 'openai' ? await research.runOpenAI(prompt, SCHEMA, cfg, onEvent)
+      : await runClaude(prompt, cfg, onEvent);
     const byId = Object.fromEntries(candidates.map(c => [c.id, c]));
     const cache = loadCache();
     data.ranked = data.ranked.map(r => {
@@ -207,9 +227,17 @@ async function rank(job, loc, candidates, cfg, onEvent = () => {}) {
       return merged;
     }).sort((a, b) => b.score - a.score);
     saveCache(cache);
+    // Give back: report what was verified so the next driver skips the research.
+    if (cloud.connected(cfg) && cfg.shareFacts !== false) {
+      const facts = data.ranked.filter(r => r.submit && r.submit.method && byId[r.id] && byId[r.id].lat).map(r => {
+        const c = byId[r.id];
+        return { key: cloud.factKey(c), name: c.name, address: c.address, lat: c.lat, lon: c.lon, brand: c.brand, submit: r.submit, hours_today: r.hours_today || '', est_cost_usd: r.est_cost_usd ?? null, cost_basis: r.cost_basis || '', rating: r.rating ?? null, open_now: r.open_now ?? null, source: provider };
+      });
+      cloud.reportFacts(cfg, facts).then(() => log(`shop facts: reported ${facts.length}`)).catch(e => log(`shop facts report failed: ${e.message}`));
+    }
     return data;
   } catch (e) {
-    log(`Claude ranking failed, using distance fallback: ${e.message}`);
+    log(`${provider} ranking failed, using fallback: ${e.message}`);
     return fallbackRanking(candidates);
   }
 }

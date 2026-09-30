@@ -21,6 +21,13 @@ const DEFAULTS = {
   port: 4243,
   claudeModel: '',
   claudeTimeoutSec: 540,
+  // Research "brain" for ranking: 'auto' (Claude Code if installed, else a key, else none),
+  // 'claude-code', 'anthropic', 'openai', or 'none' (distance + known addresses only).
+  research: 'auto',
+  anthropicApiKey: '',
+  openaiApiKey: '',
+  researchModel: '', // blank = provider default
+  shareFacts: true,  // report what this driver learns about shops back to the Print@ cloud
   // Local-mode sender: 'mailapp' (default; sends through Mail.app with whatever account
   // is set up there, no credentials) or 'smtp' (send_email.py + gmailEnv/smtpUser).
   sender: 'mailapp',

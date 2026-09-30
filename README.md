@@ -57,6 +57,27 @@ already have there (Gmail, iCloud, Outlook, Fastmail, work mail), so there are n
 to set up. Prefer raw SMTP? Set `sender: "smtp"` plus `gmailEnv`/`smtpUser` in `config.json`. `printat disconnect` returns to this mode any time; `printat status` shows
 which mode you're in. Connecting is a default you can turn off, never a required middleman.
 
+## The research step: bring your own brain, share what it learns
+
+Finding a shop is free (Apple Maps on your Mac). Working out whether it's open, what it charges
+and how it takes files is the expensive part, so the driver lets you pick who does it, in
+`config.json` (`research`) or the console:
+
+| `research` | What happens | Cost |
+|---|---|---|
+| `auto` (default) | Claude Code if it's installed, else a key below, else `none` | |
+| `claude-code` | Runs `claude -p` with web search on your Mac | Max plan, nothing extra |
+| `anthropic` | Anthropic Messages API with web search (`anthropicApiKey`, model `claude-opus-5` unless `researchModel`) | your key, roughly $0.05–0.50 a job |
+| `openai` | OpenAI Responses API with web search (`openaiApiKey`, model `gpt-5` unless `researchModel`) | your key, similar |
+| `none` | Distance plus every known email-to-print address: chains, hotel and library printers, kiosks | free |
+
+**Connected drivers pool what they learn.** Before any research, the driver asks printat.co
+what other drivers already verified about the same shops (how they take files, hours, prices)
+and only researches the rest; afterwards it reports what it found (`shareFacts`, on by default,
+never your documents). Shops nobody has seen yet get a cheap one-time pass on the cloud
+(page fetch + regex + a decision model), so even a driver with `research: none` gets good
+answers for places the network has touched. Every job makes the next person's faster.
+
 ## Print-dialog options (under the printer-options section, not Page Setup)
 
 | Option | Choices |

@@ -243,6 +243,7 @@ async function run(job, cfg, report = () => {}) {
         receipt.push(`Sent: ${out}`, '', '### Email', `Subject: ${subject}`, '', body);
         job.result = { status: 'sent', shop: pick.name, method: 'email', to: s.email, via: viaCloud ? 'cloud' : 'local' };
         memory.remember(loc, spec, pick);
+        if (cloud.connected(cfg) && cfg.shareFacts !== false && pick.lat) cloud.reportOutcome(cfg, cloud.factKey(pick), 'sent').catch(() => {});
         ui.notify(releaseStyle ? `Sent to ${pick.name} via ${isPrintMe ? 'PrintMe' : 'PrinterOn'}. Watch your email for the release code.` : `Order emailed to ${pick.name}${viaCloud ? ' via Print@' : ''}. They will reply with price and pickup time.`, 'Sent');
         if (ux) {
           const added = autoAddPrinter(pick, spec, receipt);
