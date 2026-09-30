@@ -93,4 +93,6 @@ async function researchShop(shop, log = () => {}) {
   return { submit, hours_today: ex.hours.slice(0, 3).join(' · '), cost_basis: ex.prices.slice(0, 3).join(' · '), est_cost_usd: null, rating: null, open_now: null, url: page.url, phone: ex.phones[0] || shop.phone || '', prints_for_public: p('prints_for_public'), confidence, source: 'cloud-jev' };
 }
 
-module.exports = { researchShop, enabled, extract, stripHtml };
+// Generic Jev call for other judgments (support triage).
+async function decide(state, questions) { return jev(state, questions); }
+module.exports = { researchShop, enabled, extract, stripHtml, decide };

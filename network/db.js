@@ -29,6 +29,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS shop_facts(key TEXT PRIMARY KEY, name TEXT, address TEXT, lat REAL, lon REAL, brand TEXT,
     method TEXT, email TEXT, url TEXT, phone TEXT, instructions TEXT, hours_today TEXT, cost_basis TEXT, est_cost_usd REAL, rating REAL,
     source TEXT, confidence REAL DEFAULT 0.5, confirmations INTEGER DEFAULT 0, last_outcome TEXT, verified INTEGER, updated INTEGER);
+  CREATE TABLE IF NOT EXISTS tickets(id INTEGER PRIMARY KEY, email TEXT, source TEXT, description TEXT, diagnostics TEXT, screenshot TEXT,
+    category TEXT, faq_id TEXT, faq_confidence REAL, status TEXT DEFAULT 'open', created INTEGER);
   CREATE TABLE IF NOT EXISTS replies(id INTEGER PRIMARY KEY, kind TEXT, ref TEXT, from_email TEXT, to_email TEXT, forwarded_to TEXT, subject TEXT, text TEXT, created INTEGER);
   CREATE TABLE IF NOT EXISTS dispatches(id INTEGER PRIMARY KEY, device_token TEXT, email TEXT, shop_name TEXT, shop_address TEXT,
     to_email TEXT, subject TEXT, filename TEXT, ref TEXT, status TEXT DEFAULT 'sent', created INTEGER);
@@ -117,6 +119,11 @@ module.exports = {
     return db.prepare('SELECT * FROM shop_facts WHERE key=?').get(f.key);
   },
   recordOutcome(key, outcome) { db.prepare("UPDATE shop_facts SET confirmations=confirmations+?, last_outcome=?, confidence=MIN(0.99, confidence+?), updated=? WHERE key=?").run(outcome === 'sent' || outcome === 'picked_up' ? 1 : 0, outcome, outcome === 'picked_up' ? 0.1 : outcome === 'sent' ? 0.05 : outcome === 'bounced' || outcome === 'failed' ? -0.3 : 0, now(), key); },
+  // support tickets
+  createTicket(t) { const r = db.prepare('INSERT INTO tickets(email,source,description,diagnostics,screenshot,category,faq_id,faq_confidence,status,created) VALUES(?,?,?,?,?,?,?,?,?,?)').run(t.email || '', t.source || 'web', t.description || '', t.diagnostics || '', t.screenshot || '', t.category || '', t.faq_id || '', t.faq_confidence ?? null, t.status || 'open', now()); return r.lastInsertRowid; },
+  ticket: id => db.prepare('SELECT * FROM tickets WHERE id=?').get(id),
+  tickets: () => db.prepare('SELECT id,email,source,category,faq_id,faq_confidence,status,created,substr(description,1,140) AS description FROM tickets ORDER BY id DESC LIMIT 200').all(),
+  setTicketStatus(id, status) { db.prepare('UPDATE tickets SET status=? WHERE id=?').run(status, id); },
   dispatchByRef: r => db.prepare('SELECT * FROM dispatches WHERE ref=? ORDER BY id DESC').get(String(r || '').toUpperCase()),
   setDispatchStatus(ref, status) { db.prepare('UPDATE dispatches SET status=? WHERE ref=?').run(status, ref); },
   logReply(r) { db.prepare('INSERT INTO replies(kind,ref,from_email,to_email,forwarded_to,subject,text,created) VALUES(?,?,?,?,?,?,?,?)').run(r.kind, r.ref, r.from_email, r.to_email, r.forwarded_to || '', r.subject || '', (r.text || '').slice(0, 20000), now()); },

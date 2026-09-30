@@ -152,6 +152,11 @@ One line on macOS (needs the Xcode Command Line Tools, Node.js 22+ and git):
 curl -fsSL https://printat.co/install.sh | bash
 ```
 
+Something wrong? `printat bug "what happened" --screenshot ~/Desktop/shot.png` sends a report with
+diagnostics (versions, settings without keys, the last log lines, the last receipt) to Print@ support;
+known problems get the fix back by email immediately, the rest reach a person. The same form is in
+the console (http://127.0.0.1:4243/) and at https://printat.co/help, which also answers questions.
+
 The driver checks for updates daily and tells you (notification + console banner). To update:
 
 ```

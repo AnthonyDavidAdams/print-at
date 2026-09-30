@@ -50,6 +50,20 @@ form.settings{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding
 ${(() => { const u = require('./update').status(); return u.available ? `<div style="background:#fff7e0;border:1px solid #e3c86a;border-radius:8px;padding:10px 14px;margin:10px 0"><b>Update available</b> (${esc(u.latest)}${u.message ? ': ' + esc(u.message.split('\n')[0].slice(0, 90)) : ''}). In Terminal: <code>printat update</code></div>` : ''; })()}
 <div class="muted">Agent on 127.0.0.1:${cfg.port}. Printers also appear in System Settings › Printers &amp; Scanners. · <a href="/near">printers near me (map)</a>${fs.existsSync(SYNC_OUT) ? ' · directory: ' + (readJson(SYNC_OUT, {}).count || 0) + ' printers' : ''}</div>
 
+<h2>Report a problem</h2>
+<form id="bugform" class="settings" onsubmit="return sendBug(event)">
+<label>What happened, and what you expected <textarea name="description" rows="3" required style="width:100%"></textarea></label>
+<label>Screenshot (optional) <input type="file" name="shot" accept="image/*"></label>
+<div><button>Send report</button> <span class="muted" id="bugnote">Includes versions, settings (no keys), the last log lines and the last receipt. Known fixes come straight back.</span></div>
+</form>
+<script>
+async function sendBug(e){e.preventDefault();const f=e.target,n=document.getElementById('bugnote');n.textContent='Sending…';
+  const file=f.shot.files[0];let shot=null;if(file){shot=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r({name:file.name,b64:rd.result.split(',')[1]});rd.readAsDataURL(file)});}
+  const r=await fetch('/api/bug',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({description:f.description.value,screenshot:shot})}).then(r=>r.json()).catch(e=>({error:e.message}));
+  n.innerHTML=r.ok?('<b>Sent — ticket #'+r.id+'.</b> '+(r.answer?'Known fix:<pre style="white-space:pre-wrap">'+r.answer.replace(/</g,'&lt;')+'</pre>':'A person will reply by email.')):('Error: '+(r.error||'failed'));
+  if(r.ok)f.reset();return false;}
+</script>
+
 <h2>Settings</h2>
 <form method="post" action="/settings" class="settings">
 <label>Your name <input type="text" name="contactName" value="${esc(cfg.contactName)}"></label>
@@ -182,6 +196,15 @@ function handle(req, res, cfg) {
   }
   if (req.method !== 'POST') return false;
   const back = () => { res.writeHead(303, { Location: '/' }); res.end(); };
+  if (url === '/api/bug') {
+    let raw = ''; req.on('data', d => raw += d); req.on('end', async () => {
+      try { const b = JSON.parse(raw || '{}'); let shotPath = '';
+        if (b.screenshot && b.screenshot.b64) { shotPath = path.join(require('os').tmpdir(), 'printat-bug-' + Date.now() + '.png'); fs.writeFileSync(shotPath, Buffer.from(b.screenshot.b64, 'base64')); }
+        const r = await require('./bug').send({ description: String(b.description || ''), screenshotPath, cfg });
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r));
+      } catch (e) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }
+    }); return true;
+  }
   if (url === '/settings') return form(req, f => {
     const cur = readJson(CONFIG_PATH, {});
     for (const k of ['contactName', 'contactEmail', 'contactPhone', 'homeAddress', 'gmailEnv', 'claudeModel', 'sender', 'mailAccount', 'research', 'anthropicApiKey', 'openaiApiKey', 'researchModel']) if (k in f) cur[k] = (f[k] || '').trim();

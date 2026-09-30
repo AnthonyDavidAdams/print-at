@@ -11,6 +11,7 @@ case "$cmd" in
   connect)    exec "$NODE" "$DIR/agent/connect.js" "$@" ;;
   status)     exec "$NODE" "$DIR/agent/connect.js" --status ;;
   disconnect) exec "$NODE" "$DIR/agent/connect.js" --disconnect ;;
+  bug)        exec "$NODE" "$DIR/agent/bug.js" "$@" ;;
   update)
     echo "==> Updating $DIR"
     git -C "$DIR" pull --ff-only || { echo "git pull failed (local changes?). Fix and re-run."; exit 1; }
@@ -25,6 +26,7 @@ case "$cmd" in
     echo "                            codes — no local email setup."
     echo "  printat status            Show whether this Mac is connected."
     echo "  printat update            Pull the latest driver and reinstall."
+    echo "  printat bug \"what happened\" [--screenshot file]   Send a bug report with diagnostics."
     echo "  printat disconnect        Go back to fully local mode (send from your own email)."
     echo
     echo "Print settings (priority, radius, shop type, color) live in the Print dialog."

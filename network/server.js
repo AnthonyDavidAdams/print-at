@@ -8,6 +8,7 @@ const path = require('path');
 const db = require('./db');
 const mail = require('./mail');
 const shopResearch = require('./research');
+const FAQ = require('./faq');
 const qr = require('./qr');
 
 const PORT = process.env.PORT || 4260;
@@ -123,6 +124,72 @@ const ADMIN_SECRET = process.env.PRINTAT_ADMIN_SECRET || '';
 const LATEST = { at: 0, data: null };
 const FALLBACK_INBOX = process.env.PRINTAT_INBOX || '';
 const replyAddr = (kind, ref) => `${kind}-${String(ref).toLowerCase()}@${MAIL_DOMAIN}`;
+// ---- support: match a question / bug report to the FAQ with Jev; escalate when unsure ----
+async function triage(text) {
+  const out = { faq: null, confidence: 0, category: 'other' };
+  if (!text || !shopResearch.enabled()) return out;
+  try {
+    const criteria = Object.fromEntries(FAQ.map(f => [f.id, `${f.title}. Typical report: ${f.match}`]).concat([['none', 'None of the listed problems match; this needs a person.']]));
+    const { answers } = await shopResearch.decide({ user_message: text.slice(0, 4000) }, {
+      faq: { type: 'choice', instructions: 'Which known Print@ problem or question does this message describe? Pick "none" if it is not clearly one of them.', criteria },
+      category: { type: 'choice', instructions: 'What kind of message is this?', criteria: { install: 'Installing or updating the driver, command line errors.', connect: 'Connecting the Mac to the cloud, magic links, email delivery of the link.', printing: 'A print job: finding shops, ranking, sending, the status window, queue.', shop: 'A print shop, pickup codes, replies from shops, the shop portal.', account: 'Pricing, privacy, account, billing.', feature: 'A feature request or product feedback rather than a problem.', other: 'Anything else.' } },
+    });
+    const a = answers.faq || {}; out.confidence = a.confidence || 0; out.faq = a.choice && a.choice !== 'none' && out.confidence >= 0.6 ? FAQ.find(f => f.id === a.choice) || null : null;
+    out.category = (answers.category && answers.category.choice) || 'other';
+  } catch (e) { console.error('triage:', e.message); }
+  return out;
+}
+const HELP_CSS = `<style>.faq{margin-top:10px}.faq details{border:2px solid var(--ink);background:#fff;padding:8px 12px;margin-top:8px}.faq summary{font-family:Oswald;font-weight:700;cursor:pointer}.faq pre{white-space:pre-wrap;font-size:14px}.ans{background:#e8f5ec;border:2px solid #2e7d4f;padding:12px;margin-top:10px;white-space:pre-wrap}</style>`;
+function helpPage(msg = '') {
+  return page('Print@™ help', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/">Home</a></span></div>
+  <p class=tag>Help &amp; bug reports</p>${HELP_CSS}${msg}
+  <div class=card><div class=lab>Ask a question</div>
+    <label>What's going on?<textarea id=q rows=3 placeholder="e.g. printat connect says Cannot find module…"></textarea></label>
+    <button class=btn id=ask>Ask</button><div id=ans></div></div>
+  <div class=card><div class=lab>Report a problem</div><form id=bug>
+    <label>Your email<input name=email inputmode=email required placeholder="you@example.com"></label>
+    <label>What happened, and what you expected<textarea name=description rows=5 required></textarea></label>
+    <label>Screenshot (optional)<input type=file name=shot accept="image/*"></label>
+    <button class=btn red>Send report</button><div class=muted id=note style=margin-top:8px>We read every report. If it matches a known fix you get it back by email right away; otherwise a person picks it up.</div></form></div>
+  <div class=card><div class=lab>Known fixes</div><div class=faq>${FAQ.map(f => `<details><summary>${esc(f.title)}</summary><pre>${esc(f.answer)}</pre></details>`).join('')}</div></div>
+  <script>
+  document.getElementById('ask').onclick=async()=>{const q=document.getElementById('q').value.trim();if(!q)return;const a=document.getElementById('ans');a.innerHTML='<div class=muted>Thinking…</div>';
+    const r=await fetch('/api/help/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({q})}).then(r=>r.json());
+    a.innerHTML=r.answer?'<div class=ans><b>'+r.title+'</b>\n\n'+r.answer.replace(/</g,'&lt;')+'</div>':'<div class=ans style="background:#fff7e0;border-color:#d09a3c">Not a known one. Send it as a report below and a person will answer by email.</div>';};
+  document.getElementById('bug').onsubmit=async e=>{e.preventDefault();const f=e.target;const note=document.getElementById('note');note.textContent='Sending…';
+    const file=f.shot.files[0];let shot=null;if(file){shot=await new Promise(res=>{const rd=new FileReader();rd.onload=()=>res({name:file.name,b64:rd.result.split(',')[1]});rd.readAsDataURL(file)});}
+    const r=await fetch('/api/bugs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:f.email.value,description:f.description.value,source:'web',screenshot:shot})}).then(r=>r.json());
+    note.innerHTML=r.ok?('<b>Got it — ticket #'+r.id+'.</b> '+(r.answer?'This looks like a known one; the fix is in your inbox and below.<div class=ans>'+r.answer.replace(/</g,'&lt;')+'</div>':'A person will reply to '+f.email.value+'.')):'Error: '+(r.error||'failed');
+    if(r.ok)f.reset();};
+  </script>`);
+}
+// Turn a bug report into a ticket, an auto-reply when we know the fix, and a heads-up to a human.
+async function fileTicket(b, source) {
+  const email = String(b.email || '').trim().toLowerCase();
+  const desc = String(b.description || '').slice(0, 20000);
+  if (!desc) return { error: 'description required' };
+  let shotPath = '';
+  if (b.screenshot && b.screenshot.b64) {
+    const dir = path.join(db.DIR, 'bugs'); fs.mkdirSync(dir, { recursive: true });
+    const name = String(b.screenshot.name || 'shot.png').replace(/[^\w.]+/g, '_').slice(-60);
+    shotPath = path.join(dir, `${Date.now()}-${name}`); fs.writeFileSync(shotPath, Buffer.from(String(b.screenshot.b64).slice(0, 12e6), 'base64'));
+  }
+  const diag = typeof b.diagnostics === 'string' ? b.diagnostics.slice(0, 40000) : JSON.stringify(b.diagnostics || {}, null, 1).slice(0, 40000);
+  const t = await triage(desc + (diag ? '\n\nDiagnostics:\n' + diag.slice(0, 3000) : ''));
+  const id = db.createTicket({ email, source, description: desc, diagnostics: diag, screenshot: shotPath, category: t.category, faq_id: t.faq ? t.faq.id : '', faq_confidence: t.confidence, status: t.faq ? 'auto-replied' : 'open' });
+  const subjectTag = `[Print@ #${id}] ${t.category}${t.faq ? ' · auto: ' + t.faq.id : ' · NEEDS A HUMAN'}`;
+  const summary = `From: ${email || '(no email)'} via ${source}\nCategory: ${t.category}\nFAQ match: ${t.faq ? t.faq.id + ' (' + t.confidence.toFixed(2) + ')' : 'none (' + t.confidence.toFixed(2) + ')'}\n\n${desc}\n\n--- diagnostics ---\n${diag || '(none)'}\n\nAdmin: ${BASE}/admin/bugs?key=…`;
+  if (FALLBACK_INBOX) {
+    if (shotPath) mail.withAttachment(FALLBACK_INBOX, '', subjectTag, summary, { filename: path.basename(shotPath), buffer: fs.readFileSync(shotPath), contentType: 'image/png' }, email || undefined).catch(e => console.error('ticket mail:', e.message));
+    else mail(FALLBACK_INBOX, subjectTag, summary, email || undefined);
+  }
+  if (email) {
+    if (t.faq) mail(email, `Print@ support: ${t.faq.title}`, `Thanks for the report (ticket #${id}). This looks like a known one; here is the fix:\n\n${t.faq.answer}\n\nIf that doesn't do it, just reply to this email and a person will pick it up.`, FALLBACK_INBOX || undefined);
+    else mail(email, `Print@ support: we got your report (#${id})`, `Thanks. A person is looking at it and will reply here.\n\nWhat you sent:\n${desc.slice(0, 2000)}`, FALLBACK_INBOX || undefined);
+  }
+  return { ok: true, id, category: t.category, faq: t.faq ? t.faq.id : null, answer: t.faq ? t.faq.answer : null, title: t.faq ? t.faq.title : null };
+}
+
 function jobListing(items) { return items.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n'); }
 function notifyShop(shop, jobs, customerName) {
   mail(shop.email, `New print job (${jobs.length} file${jobs.length > 1 ? 's' : ''}) — pickup ${jobs[0].pickup_code}`,
@@ -271,6 +338,33 @@ const server = http.createServer(async (req, res) => {
       if (!file) return json(res, 404, { error: 'no such directory file' });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', 'Last-Modified': fs.statSync(file).mtime.toUTCString() });
       return res.end(fs.readFileSync(file));
+    }
+
+    // ---- SUPPORT ----
+    if (req.method === 'GET' && url === '/help') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(helpPage()); }
+    if (req.method === 'POST' && url === '/api/help/ask') {
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      const t = await triage(String(b.q || ''));
+      return json(res, 200, t.faq ? { answer: t.faq.answer, title: t.faq.title, id: t.faq.id, confidence: t.confidence } : { answer: null, confidence: t.confidence });
+    }
+    if (req.method === 'POST' && url === '/api/bugs') {
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      const auth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      const dev = auth ? db.device(auth) : null;
+      if (dev && !b.email) b.email = dev.email;
+      const r = await fileTicket(b, b.source || (dev ? 'driver' : 'web'));
+      return json(res, r.error ? 400 : 200, r);
+    }
+    if (req.method === 'GET' && url === '/admin/bugs') {
+      if (!ADMIN_SECRET || q.key !== ADMIN_SECRET) return json(res, 401, { error: 'bad key' });
+      const rows = db.tickets();
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }), res.end(page('Print@ tickets', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag>tickets</span></div>` + rows.map(r => `<div class=job><div class=head><b>#${r.id} ${esc(r.email)}</b> <span class="pill ${r.status === 'open' ? 'queued' : 'done'}">${esc(r.status)}</span></div><div class=m>${new Date(r.created).toISOString().slice(0, 16)} · ${esc(r.source)} · ${esc(r.category)}${r.faq_id ? ' · ' + esc(r.faq_id) + ' ' + (r.faq_confidence || 0).toFixed(2) : ''}</div><div style="margin-top:6px">${esc(r.description)}</div><div class=m><a href="/admin/bugs/${r.id}?key=${esc(q.key)}">details</a></div></div>`).join('') || '<p>No tickets.</p>'));
+    }
+    if (req.method === 'GET' && /^\/admin\/bugs\/\d+$/.test(url)) {
+      if (!ADMIN_SECRET || q.key !== ADMIN_SECRET) return json(res, 401, { error: 'bad key' });
+      const t = db.ticket(Number(url.split('/')[3])); if (!t) return json(res, 404, { error: 'no ticket' });
+      if (q.shot && t.screenshot && fs.existsSync(t.screenshot)) { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(t.screenshot)); }
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }), res.end(page(`Ticket #${t.id}`, `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/admin/bugs?key=${esc(q.key)}">« tickets</a></span></div><div class=card><div class=lab>#${t.id} · ${esc(t.status)} · ${esc(t.category)} · ${esc(t.source)}</div><p><b>${esc(t.email)}</b> · ${new Date(t.created).toISOString()}</p><pre style="white-space:pre-wrap">${esc(t.description)}</pre>${t.screenshot ? `<img src="/admin/bugs/${t.id}?key=${esc(q.key)}&shot=1" style="max-width:100%;border:2px solid var(--ink)">` : ''}<details><summary>diagnostics</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(t.diagnostics)}</pre></details></div>`));
     }
 
     // Latest driver version for the update check (tip of main on GitHub, cached 10 min).
