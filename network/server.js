@@ -120,6 +120,7 @@ function customerPage(preShop) {
 const MAIL_DOMAIN = process.env.PRINTAT_MAIL_DOMAIN || new URL(BASE).hostname.replace(/^www\./, '');
 const INBOUND_SECRET = process.env.INBOUND_SECRET || '';
 const ADMIN_SECRET = process.env.PRINTAT_ADMIN_SECRET || '';
+const LATEST = { at: 0, data: null };
 const FALLBACK_INBOX = process.env.PRINTAT_INBOX || '';
 const replyAddr = (kind, ref) => `${kind}-${String(ref).toLowerCase()}@${MAIL_DOMAIN}`;
 function jobListing(items) { return items.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n'); }
@@ -270,6 +271,18 @@ const server = http.createServer(async (req, res) => {
       if (!file) return json(res, 404, { error: 'no such directory file' });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=3600', 'Last-Modified': fs.statSync(file).mtime.toUTCString() });
       return res.end(fs.readFileSync(file));
+    }
+
+    // Latest driver version for the update check (tip of main on GitHub, cached 10 min).
+    if (req.method === 'GET' && url === '/api/driver/latest') {
+      if (!LATEST.at || Date.now() - LATEST.at > 600e3) {
+        try {
+          const r = await fetch('https://api.github.com/repos/AnthonyDavidAdams/print-at/commits/main', { headers: { 'user-agent': 'printat.co', accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000) });
+          if (r.ok) { const c = await r.json(); LATEST.data = { commit: c.sha, date: Date.parse(c.commit && c.commit.committer && c.commit.committer.date) || 0, message: (c.commit && c.commit.message || '').split('\n')[0], url: c.html_url }; LATEST.at = Date.now(); }
+        } catch (e) { console.error('driver/latest:', e.message); }
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' });
+      return res.end(JSON.stringify(LATEST.data || {}));
     }
 
     // ---- SHARED SHOP FACTS ----

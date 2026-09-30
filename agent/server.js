@@ -8,6 +8,7 @@ const { JOBS_DIR, load, log } = require('./config');
 const { run } = require('./pipeline');
 const ui = require('./ui');
 const panel = require('./panel');
+const update = require('./update');
 const console_ = require('./console');
 
 let cfg = load();
@@ -74,7 +75,7 @@ const server = http.createServer((req, res) => {
   if (console_.handle(req, res, cfg)) return;
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok: true, dryRun: cfg.dryRun, skipClaude: cfg.skipClaude }));
+    return res.end(JSON.stringify({ ok: true, dryRun: cfg.dryRun, skipClaude: cfg.skipClaude, update: update.status() }));
   }
   if (req.method === 'GET' && req.url === '/jobs') {
     const list = fs.readdirSync(JOBS_DIR).sort().reverse().slice(0, 50).map(d => {
@@ -164,4 +165,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(cfg.port, '127.0.0.1', () => {
   log(`Print@ agent listening on 127.0.0.1:${cfg.port}${cfg.dryRun ? ' [DRY RUN]' : ''}${cfg.skipClaude ? ' [NO CLAUDE]' : ''}`);
+  update.schedule(cfg);
 });

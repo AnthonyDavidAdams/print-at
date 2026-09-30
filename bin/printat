@@ -8,6 +8,11 @@ case "$cmd" in
   connect)    exec "$NODE" "$DIR/agent/connect.js" "$@" ;;
   status)     exec "$NODE" "$DIR/agent/connect.js" --status ;;
   disconnect) exec "$NODE" "$DIR/agent/connect.js" --disconnect ;;
+  update)
+    echo "==> Updating $DIR"
+    git -C "$DIR" pull --ff-only || { echo "git pull failed (local changes?). Fix and re-run."; exit 1; }
+    echo "==> Reinstalling (sudo needed for the CUPS backend)"
+    exec sudo "$DIR/install.sh" ;;
   *)
     echo "Print@ — nearest print shop, from any Print dialog."
     echo
@@ -16,6 +21,7 @@ case "$cmd" in
     echo "                            print through the network, branded sender, pickup"
     echo "                            codes — no local email setup."
     echo "  printat status            Show whether this Mac is connected."
+    echo "  printat update            Pull the latest driver and reinstall."
     echo "  printat disconnect        Go back to fully local mode (send from your own email)."
     echo
     echo "Print settings (priority, radius, shop type, color) live in the Print dialog."

@@ -195,7 +195,9 @@ async function rank(job, loc, candidates, cfg, onEvent = () => {}) {
   let cloudKnown = [];
   if (cloud.connected(cfg)) {
     try {
-      const facts = await cloud.lookupFacts(cfg, candidates);
+      // Only independents: chains and directory printers are already known to the driver.
+      const ask = candidates.filter(c => c.lat && !c.printeron && !c.printme && !c.library_print && !c.chain_email && (c.brand || 'independent') === 'independent');
+      const facts = ask.length ? await cloud.lookupFacts(cfg, ask) : {};
       for (const c of candidates) { const f = facts[cloud.factKey(c)]; if (f) { c.known = f; cloudKnown.push({ name: c.name, address: c.address, ...f }); } }
       if (cloudKnown.length) onEvent(`${cloudKnown.length} of ${candidates.length} places already known to Print@`);
     } catch (e) { log(`shop facts lookup failed: ${e.message}`); }

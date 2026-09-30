@@ -152,6 +152,12 @@ One line on macOS (needs the Xcode Command Line Tools, Node.js 22+ and git):
 curl -fsSL https://printat.co/install.sh | bash
 ```
 
+The driver checks for updates daily and tells you (notification + console banner). To update:
+
+```
+printat update
+```
+
 Or by hand:
 
 ```

@@ -47,6 +47,7 @@ form.inline{display:flex;gap:8px;align-items:center;margin-top:10px}
 form.settings{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}form.settings label{display:flex;flex-direction:column;font-size:12px;color:#5b6573;gap:3px}form.settings label input[type=text]{min-width:0;width:100%;box-sizing:border-box}form.settings label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:#1c2430}form.settings div{grid-column:1/-1}input[type=text]{font:13px -apple-system,system-ui;padding:4px 8px;border:1px solid #c9ced5;border-radius:6px;min-width:220px}
 </style>
 <h1>Print@<sup>™</sup> console</h1>
+${(() => { const u = require('./update').status(); return u.available ? `<div style="background:#fff7e0;border:1px solid #e3c86a;border-radius:8px;padding:10px 14px;margin:10px 0"><b>Update available</b> (${esc(u.latest)}${u.message ? ': ' + esc(u.message.split('\n')[0].slice(0, 90)) : ''}). In Terminal: <code>printat update</code></div>` : ''; })()}
 <div class="muted">Agent on 127.0.0.1:${cfg.port}. Printers also appear in System Settings › Printers &amp; Scanners. · <a href="/near">printers near me (map)</a>${fs.existsSync(SYNC_OUT) ? ' · directory: ' + (readJson(SYNC_OUT, {}).count || 0) + ' printers' : ''}</div>
 
 <h2>Settings</h2>

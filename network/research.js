@@ -86,6 +86,9 @@ async function researchShop(shop, log = () => {}) {
     : (ex.phones[0] || shop.phone) ? { method: 'phone', phone: ex.phones[0] || shop.phone, url: page.url, instructions: 'Call to ask how they accept files.' }
     : { method: 'in_person', url: page.url, instructions: 'Bring the file on a USB stick or ask at the counter.' };
   const confidence = Math.round(100 * Math.min(p('official_site'), p('prints_for_public'), email ? p('accepts_email_orders') : upload ? p('has_online_upload') : 0.5)) / 100;
+  // A phone/in-person verdict with weak evidence that they even print for the public is not a
+  // fact worth serving; leave it unknown so a driver with a real brain researches it.
+  if (!email && !upload && p('prints_for_public') < 0.5) { log(`${shop.name}: weak evidence (${p('prints_for_public').toFixed(2)}), not stored`); return null; }
   log(`${shop.name}: ${submit.method}${email ? ' ' + email : ''} conf ${confidence} in ${Date.now() - started}ms, $${cost.toFixed(5)}`);
   return { submit, hours_today: ex.hours.slice(0, 3).join(' · '), cost_basis: ex.prices.slice(0, 3).join(' · '), est_cost_usd: null, rating: null, open_now: null, url: page.url, phone: ex.phones[0] || shop.phone || '', prints_for_public: p('prints_for_public'), confidence, source: 'cloud-jev' };
 }
