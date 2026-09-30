@@ -9,7 +9,9 @@ export default {
     let parsed;
     try { parsed = await PostalMime.parse(message.raw); } catch (e) { parsed = null; }
     const payload = {
-      to: message.to, from: message.from,
+      to: message.to,
+      from: parsed?.from?.address || message.from, // header From, not the bounce/envelope sender
+      envelopeFrom: message.from,
       subject: parsed?.subject || message.headers.get('subject') || '',
       text: parsed?.text || '', html: parsed?.html || '',
       fromName: parsed?.from?.name || '',
