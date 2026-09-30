@@ -38,12 +38,18 @@ const oh=new Headers(res.headers);const l=oh.get('location');if(l&&l.includes(O)
 return new Response(res.body,{status:res.status,statusText:res.statusText,headers:oh});}};
 ```
 
+## Email (done 2026-09-30)
+- Outbound: **Resend**, from `print@printat.co` (`RESEND_API_KEY`, `PRINTAT_FROM`, `PRINTAT_FROM_NAME` on Railway;
+  `network/mail.js` prefers Resend, then Gmail API, then SMTP). Domain verified: TXT `resend._domainkey`,
+  CNAME `rsend`/`send` → *.forge.rmta.net.
+- Inbound: Cloudflare Email Routing (MX route1-3.mx.cloudflare.net). `print@printat.co` → anthony@175g.com.
+  Catch-all reserved for the per-job reply Worker (not built yet).
+- Relayed orders set `Reply-To: <customer>`; portal jobs are held until the customer confirms by email.
+- Local-only drivers send via Mail.app (`sender: mailapp`), no credentials.
+
 ## Still open
-- **Branded sender.** `PRINTAT_FROM` is still a personal Gmail address, sent through the
-  Gmail API (`GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN`). To send as `print@printat.co`:
-  verify printat.co on Resend (SPF/DKIM records in Cloudflare) and switch `network/mail.js`,
-  or add the address as a Gmail alias. Inbound replies need an MX / Email Routing rule too.
-- **Live PrinterOn send** never tested end to end (creates a real held job).
+- Per-job reply addresses (`job-<ref>@printat.co`) + Worker/inbound endpoint that logs the shop's reply and forwards it to the customer.
+- Live PrinterOn send never tested end to end (creates a real held job).
 
 ## The driver connects here
 Connected drivers hit this same service: `POST /api/device/start` + `/device/confirm` +
