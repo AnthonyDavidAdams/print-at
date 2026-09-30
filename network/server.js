@@ -42,11 +42,26 @@ input,select,textarea{width:100%;font-family:"Bitter";font-size:16px;padding:11p
 .queued{background:var(--red);color:#fff}.printed{background:var(--gold);color:#1c3a57}.done{background:#2e7d4f;color:#fff}
 a{color:var(--red)}.muted{color:var(--ink2);font-size:14px}.stars{color:var(--gold);font-size:18px}
 .head{display:flex;justify-content:space-between;align-items:baseline}
+h1:after{content:"™";font-family:"Bitter",serif;font-size:.36em;vertical-align:top;position:relative;top:.5em;margin-left:2px;color:var(--ink2)}
 </style><link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@600;700&family=Bitter:wght@400;600&display=swap" rel="stylesheet">`;
 const page = (title, inner) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${title}</title>${CSS}<div class=wrap>${inner}</div>`;
 
+// printat.co is the product's front door: the landing page (shared with the GitHub Pages
+// site in docs/), its assets, and the one-line installer. The customer portal lives at /app.
+const DOCS = path.join(__dirname, '..', 'docs');
+const LANDING = fs.readFileSync(path.join(DOCS, 'index.html'), 'utf8');
+const INSTALL_SH = fs.readFileSync(path.join(__dirname, 'get.sh'), 'utf8');
+const MIME = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon' };
+function asset(res, url) {
+  const rel = decodeURIComponent(url.replace(/^\/assets\//, ''));
+  const file = path.normalize(path.join(DOCS, 'assets', rel));
+  if (!file.startsWith(path.join(DOCS, 'assets') + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end('not found'); }
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' });
+  return res.end(fs.readFileSync(file));
+}
+
 function customerPage(preShop) {
-  return page('Print@ Network', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/shop">For shops »</a></span></div>
+  return page('Print@™ Network', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/">Home</a> &middot; <a href="/shop">For shops »</a></span></div>
   <p class=tag>Send a file to a nearby shop. Pick it up with a code.</p>
   <div class=card><div class=lab>1 · Documents</div>
     <label>Add PDFs or photos (you can pick several)<input type=file id=file accept="application/pdf,image/*" multiple></label>
@@ -104,7 +119,13 @@ const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   const q = Object.fromEntries(new URL(req.url, BASE).searchParams);
   try {
-    if (req.method === 'GET' && url === '/') { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(customerPage(q.shop ? db.shopById(Number(q.shop)) : null)); }
+    if (req.method === 'GET' && url === '/') {
+      if (q.shop) return redirect(res, '/app?shop=' + encodeURIComponent(q.shop)); // old shop signs / QR codes
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(LANDING);
+    }
+    if (req.method === 'GET' && url === '/app') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(customerPage(q.shop ? db.shopById(Number(q.shop)) : null)); }
+    if (req.method === 'GET' && (url === '/install.sh' || url === '/install')) { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(INSTALL_SH); }
+    if (req.method === 'GET' && url.startsWith('/assets/')) return asset(res, url);
     if (req.method === 'GET' && url === '/health') return json(res, 200, { ok: true });
 
     // customer: shops nearby
@@ -200,7 +221,7 @@ const server = http.createServer(async (req, res) => {
 
     // GUEST JOIN — scan a QR, unlock a shop account instantly, then finish signup.
     if (req.method === 'GET' && url === '/join') {
-      return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Become a Print@ shop', `
+      return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Become a Print@™ shop', `
         <div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag>Guest signup</span></div>
         <h2>Turn your shop printer into profit</h2>
         <p class=muted>Customers and sales from a machine you already own. People nearby send print jobs, you print them from this page (no software, no kiosk), they come in to pick up. You keep the fee and the foot traffic.</p>
@@ -235,8 +256,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     // shop: landing (signup + login)
-    if (req.method === 'GET' && url === '/shop') return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Print@ for Shops', `
-      <div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/">« For customers</a></span></div>
+    if (req.method === 'GET' && url === '/shop') return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Print@™ for Shops', `
+      <div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/app">« For customers</a></span></div>
       <h2>Turn your printer into profit.</h2>
       <p class=muted>Your printer is already sitting there. Put it to work: people nearby send you jobs, you print them from this page (no software), and they walk in to pick up — new customers and a little revenue on every page. Set your own prices.</p>
       <p class=muted>You're joining the <b>largest network of public printers in the world</b> — Print@ already routes to chains, hotels, libraries and 5,000+ kiosks. Independent shops are the last gap on the map, and there's no one covering your block but you.</p>
@@ -305,12 +326,12 @@ const server = http.createServer(async (req, res) => {
         return redirect(res, '/shop/lookup?code=' + encodeURIComponent(pc));
       }
       if (req.method === 'GET' && url === '/shop/qr') {
-        const target = `${BASE}/?shop=${shop.id}`;
+        const target = `${BASE}/app?shop=${shop.id}`;
         res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
         return res.end(qr.svg(target, { dark: '#1c3a57' }));
       }
       if (req.method === 'GET' && url === '/shop/sign') {
-        const target = `${BASE}/?shop=${shop.id}`;
+        const target = `${BASE}/app?shop=${shop.id}`;
         const qrsvg = qr.svg(target, { dark: '#1c3a57' });
         return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(`<!doctype html><meta charset=utf-8><title>${esc(shop.name)} — Print@ sign</title>
         <style>@page{size:letter;margin:0}body{margin:0;font-family:"Bitter",Georgia,serif;color:#1c3a57}

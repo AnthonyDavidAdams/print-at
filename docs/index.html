@@ -3,18 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Print@ — print anywhere, one click</title>
+<title>Print@™ — print anywhere, one click</title>
 <meta name="description" content="A macOS printer that finds the nearest print shop and sends the job there. FedEx, Staples, UPS, Office Depot, and 5,000+ PrinterOn & PrintMe locations — all from your Print dialog.">
-<meta property="og:title" content="Print@ — print anywhere, one click">
+<meta property="og:title" content="Print@™ — print anywhere, one click">
 <meta property="og:description" content="Pick Print@ in any Print dialog. It finds the nearest print shop and sends the job — AI-powered, every public printer, anywhere in the world.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://anthonydavidadams.github.io/print-at/">
-<meta property="og:image" content="https://anthonydavidadams.github.io/print-at/assets/printat-badge.png">
-<meta property="og:site_name" content="Print@">
+<meta property="og:url" content="https://printat.co/">
+<link rel="canonical" href="https://printat.co/">
+<meta property="og:image" content="https://printat.co/assets/printat-badge.png">
+<meta property="og:site_name" content="Print@™">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Print@ — print anywhere, one click">
+<meta name="twitter:title" content="Print@™ — print anywhere, one click">
 <meta name="twitter:description" content="A macOS printer that finds the nearest print shop and sends the job there. Open source.">
-<meta name="twitter:image" content="https://anthonydavidadams.github.io/print-at/assets/printat-badge.png">
+<meta name="twitter:image" content="https://printat.co/assets/printat-badge.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@500;600;700&family=Bitter:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -43,6 +44,7 @@
   nav .wrap{display:flex;align-items:center;justify-content:space-between;height:66px}
   .brand{font-family:"Anton";font-size:26px;letter-spacing:1px}
   .brand .at{color:var(--red)}
+  .brand .tm{font-family:"Bitter",serif;font-size:11px;vertical-align:top;margin-left:2px;color:var(--ink2)}
   .navlinks{display:flex;gap:26px;align-items:center;font-family:"Oswald";font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:1px}
   .navlinks a:hover{color:var(--red)}
   .btn{font-family:"Oswald";font-weight:700;text-transform:uppercase;letter-spacing:1.2px;font-size:14px;
@@ -140,8 +142,9 @@
 <body>
 
 <nav><div class="wrap">
-  <div class="brand">PRINT<span class="at">@</span></div>
+  <div class="brand">PRINT<span class="at">@</span><sup class="tm">™</sup></div>
   <div class="navlinks">
+    <a href="#install">Install</a>
     <a href="#how">How</a>
     <a href="#reach">Reach</a>
     <a href="#board">The Board</a>
@@ -159,12 +162,12 @@
 <header><div class="wrap">
   <span class="kicker">Open Source &middot; macOS &middot; MIT</span>
   <img class="badge" src="assets/printat-badge.png" alt="Print@ — Print Anywhere. One Click.">
-  <p class="sub">Pick <b>Print@</b> in any Print dialog. It finds you, finds the best nearby print shop for your job, and sends it — closest, cheapest, or open right now.</p>
+  <p class="sub">Pick <b>Print@™</b> in any Print dialog. It finds you, finds the best nearby print shop for your job, and sends it — closest, cheapest, or open right now.</p>
   <div class="cta">
-    <a class="btn red" href="https://github.com/AnthonyDavidAdams/print-at">Get it on GitHub</a>
+    <a class="btn red" href="#install">Install on macOS</a>
     <a class="btn navy" href="#how">See how it works</a>
   </div>
-  <div class="cmd"><span class="p">$</span> sudo ~/print-at/install.sh</div>
+  <div class="cmd"><span class="p">$</span> curl -fsSL https://printat.co/install.sh | bash</div>
 </div></header>
 
 <div class="brands"><div class="track" id="track"></div></div>
@@ -187,6 +190,18 @@
   <div class="feats">
     <div class="feat"><div class="t">RECOMMENDED</div><h3>Driver + Print@ cloud</h3><p>One command &mdash; <code>printat connect</code> &mdash; and a link to your inbox. From then on jobs dispatch through the network: sent from a Print@ address, Print@ Network shops with real pickup codes, nothing to configure. Your files and the AI ranking still run on your Mac.</p></div>
     <div class="feat"><div class="t">FOR TINKERERS</div><h3>Fully local</h3><p>Skip the connect step and nothing but the print job leaves your machine &mdash; orders send from your own email. Flip between the two any time. Connecting is a default you can turn off, never a required middleman.</p></div>
+  </div>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <div class="lab">Get the driver</div>
+  <h2>One line. Then it&rsquo;s a printer.</h2>
+  <p class="lead">Open Terminal, paste this, and answer the one password prompt. It clones the open-source driver into <code>~/printat</code>, builds the helpers, and registers <b>Print@ Nearby</b> as a printer in every app.</p>
+  <div class="cmd" style="margin-top:22px;max-width:100%;overflow:auto"><span class="p">$</span>&nbsp;curl -fsSL https://printat.co/install.sh | bash</div>
+  <div class="feats" style="margin-top:30px">
+    <div class="feat"><div class="t">YOU NEED</div><h3>A Mac</h3><p>macOS with the Xcode Command Line Tools (<code>xcode-select --install</code>), <a href="https://nodejs.org" style="color:var(--red)">Node.js 22+</a> and git. Windows &amp; Linux ports are started &mdash; <a href="https://github.com/AnthonyDavidAdams/print-at" style="color:var(--red)">help wanted</a>.</p></div>
+    <div class="feat"><div class="t">THEN</div><h3>Connect it</h3><p><code>printat connect you@email</code> sends a link to your inbox. Click it and jobs dispatch through the Print@ cloud with pickup codes. Skip it to stay fully local.</p></div>
+    <div class="feat"><div class="t">OR BY HAND</div><h3>Clone and run</h3><p><code>git clone https://github.com/AnthonyDavidAdams/print-at ~/printat</code> then <code>sudo ~/printat/install.sh</code>. The installer is <a href="https://printat.co/install.sh" style="color:var(--red)">short bash you can read first</a>. Uninstall with <code>~/printat/uninstall.sh</code>.</p></div>
   </div>
 </div></section>
 
@@ -239,7 +254,7 @@
 <section id="network"><div class="wrap">
   <div class="lab">The network</div>
   <h2>No shop nearby? Become one.</h2>
-  <p class="lead">Print@ aggregates the networks that only cover chains, hotels and libraries. <b>Print@ Network</b> adds the places none of them touch — the local coffee shop, the small-town store. Any business with a printer and a browser can offer printing as a foot-traffic draw. No software to install: they print jobs right from a web page.</p>
+  <p class="lead">Print@ aggregates the networks that only cover chains, hotels and libraries. <b>Print@™ Network</b> adds the places none of them touch — the local coffee shop, the small-town store. Any business with a printer and a browser can offer printing as a foot-traffic draw. No software to install: they print jobs right from a web page.</p>
   <div class="feats" style="margin-top:34px">
     <div class="feat"><div class="t">FOR CUSTOMERS</div><h3>Send &amp; pick up with a code</h3><p>Choose a nearby shop, send your files, get a pickup code. Rate the shop after.</p></div>
     <div class="feat"><div class="t">FOR SHOPS</div><h3>A printer that pays</h3><p>List your hours and prices, print jobs from your browser, take a small fee at the counter.</p></div>
@@ -251,7 +266,7 @@
       <p class="lead" style="margin:0 0 14px">Have a printer? <b>Scan the code</b> or tap below to turn it into profit — customers and sales, set up in a minute. It's free.</p>
       <div class="cta">
         <a class="btn red" href="https://printat.co/join">Become a shop</a>
-        <a class="btn navy" href="https://printat.co">Open Print@ Network</a>
+        <a class="btn navy" href="https://printat.co/app">Open Print@ Network</a>
       </div>
     </div>
   </div>
@@ -261,8 +276,9 @@
   <div class="lab">Ready?</div>
   <h2>Your Mac already has a print button.<br><span class="red">Now it goes anywhere.</span></h2>
   <div class="cta" style="margin-top:28px">
-    <a class="btn red" href="https://github.com/AnthonyDavidAdams/print-at">&#9733; Get the driver on GitHub</a>
-    <a class="btn" href="https://printat.co">Open Print@ Network</a>
+    <a class="btn red" href="#install">Install the driver</a>
+    <a class="btn" href="https://printat.co/app">Open Print@ Network</a>
+    <a class="btn" href="https://github.com/AnthonyDavidAdams/print-at">&#9733; GitHub</a>
   </div>
   <p class="disc" style="margin-bottom:0">The macOS driver is free and open source. The web portal and shop network are a hosted service we run.</p>
   <p class="disc">Print@ is an independent, open-source project and is not affiliated with, endorsed by, or sponsored by FedEx, Staples, Office Depot, The UPS Store, PrinterOn, PrintMe/EFI, or any hotel or library. All product names, logos and brands are property of their respective owners and are shown only to describe compatibility.</p>

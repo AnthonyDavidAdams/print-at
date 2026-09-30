@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://anthonydavidadams.github.io/print-at/"><b>Website</b></a> ·
+  <a href="https://printat.co"><b>printat.co</b></a> ·
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-1c3a57.svg" alt="MIT"></a>
 </p>
 
@@ -123,6 +123,14 @@ notification when the order has gone out.
   in `~/.gmail.env` (`GMAIL_APP_PASSWORD=...`) so Print@ can send from your own address.
 
 ## Install
+
+One line on macOS (needs the Xcode Command Line Tools, Node.js 22+ and git):
+
+```
+curl -fsSL https://printat.co/install.sh | bash
+```
+
+Or by hand:
 
 ```
 git clone https://github.com/AnthonyDavidAdams/print-at ~/printat
