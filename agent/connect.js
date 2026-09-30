@@ -23,6 +23,15 @@ async function main() {
   if (arg === '--status') {
     if (cfg.cloudToken) console.log(`Connected to ${cfg.cloudBase} as ${cfg.cloudEmail} (useCloud=${cfg.useCloud}).`);
     else console.log(`Not connected. Running in local-only mode. Run "printat connect" to use the Print@ cloud.`);
+    // The part people actually need when "nothing happens": is the agent up, is the queue stuck.
+    const { execFileSync } = require('child_process');
+    const sh = (c, a) => { try { return execFileSync(c, a, { encoding: 'utf8', timeout: 5000 }).trim(); } catch { return ''; } };
+    const health = sh('curl', ['-s', '-m', '3', `http://127.0.0.1:${cfg.port}/health`]);
+    if (health) console.log(`Agent: running on 127.0.0.1:${cfg.port}.`);
+    else console.log(`Agent: NOT running. Start it with:  launchctl kickstart -k gui/$(id -u)/io.printat.agent   (or re-run the installer)`);
+    const lp = sh('lpstat', ['-p', 'PrintAt']); if (lp) console.log(`Printer: ${lp.replace(/\s+/g, ' ')}`);
+    const queue = sh('lpstat', ['-o', 'PrintAt']); if (queue) console.log(`Queued jobs:\n${queue}\n(Clear with: cancel -a PrintAt)`);
+    if (!sh('sh', ['-c', 'test -x /usr/libexec/cups/backend/printat && echo ok'])) console.log('Backend: MISSING (/usr/libexec/cups/backend/printat) — re-run: sudo ~/printat/install.sh');
     return;
   }
   if (arg === '--disconnect') {
