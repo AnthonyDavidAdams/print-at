@@ -2,7 +2,7 @@
 // Tells the user when a newer driver is available. The driver is a git checkout, so
 // "latest" is the tip of main on GitHub (asked via printat.co, which caches it). Checked
 // shortly after the agent starts and then daily; one notification per new version.
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { ROOT, APP_DIR, log } = require('./config');
@@ -45,4 +45,45 @@ function schedule(cfg) {
 
 function status() { return { available: !!state.available, local: (state.local || '').slice(0, 7), latest: (state.latest || '').slice(0, 7), message: state.latestMessage || '', checkedAt: state.checkedAt || 0 }; }
 
-module.exports = { check, schedule, status, local };
+// Files whose change needs the sudo installer (CUPS backend, helpers, PPD); everything
+// else only needs the agent restarted.
+const NEEDS_INSTALL = /^(backend\/|helper\/|install\.sh$|printat\.ppd$|printat-add$|icon\/)/;
+let applying = null;
+
+// Pull the latest driver. Resolves { ok, from, to, message, needsInstall, upToDate }.
+function apply() {
+  if (applying) return applying;
+  applying = (async () => {
+    const me = local(); if (!me) throw new Error('not a git checkout');
+    let branch = 'main'; try { branch = execFileSync('git', ['-C', ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim() || 'main'; } catch {}
+    const r = spawnSync('git', ['-C', ROOT, 'pull', '--ff-only', '--quiet', 'origin', branch], { encoding: 'utf8', timeout: 120000 });
+    if (r.status !== 0) throw new Error((r.stderr || r.stdout || 'git pull failed').trim().split('\n').pop());
+    const now = local();
+    if (now.commit === me.commit) { Object.assign(state, { available: false, local: now.commit }); fs.writeFileSync(STATE, JSON.stringify(state, null, 2)); return { ok: true, upToDate: true, to: now.commit.slice(0, 7) }; }
+    const changed = execFileSync('git', ['-C', ROOT, 'diff', '--name-only', `${me.commit}..${now.commit}`], { encoding: 'utf8' }).split('\n').filter(Boolean);
+    const message = execFileSync('git', ['-C', ROOT, 'log', '-1', '--format=%s'], { encoding: 'utf8' }).trim();
+    const needsInstall = changed.some(f => NEEDS_INSTALL.test(f));
+    Object.assign(state, { available: false, local: now.commit, latest: now.commit, latestDate: now.date, latestMessage: message, notified: now.commit });
+    fs.writeFileSync(STATE, JSON.stringify(state, null, 2));
+    log(`updated ${me.commit.slice(0, 7)} -> ${now.commit.slice(0, 7)} (${changed.length} files${needsInstall ? ', installer needed' : ''})`);
+    return { ok: true, from: me.commit.slice(0, 7), to: now.commit.slice(0, 7), message, files: changed.length, needsInstall };
+  })().finally(() => { applying = null; });
+  return applying;
+}
+
+// Restart the LaunchAgent after the response has gone out.
+function restart() {
+  setTimeout(() => {
+    log('restarting for update');
+    spawnSync('launchctl', ['kickstart', '-k', `gui/${process.getuid()}/io.printat.agent`], { timeout: 10000 });
+    setTimeout(() => process.exit(0), 2000); // kickstart didn't reach us (run by hand): exit and let whatever runs us restart
+  }, 600).unref();
+}
+
+// Open Terminal running "printat update" for the sudo part of an update.
+function openTerminal() {
+  const cmd = `${ROOT.replace(/'/g, "'\\''")}/bin/printat update`;
+  spawnSync('osascript', ['-', cmd], { input: 'on run argv\n tell application "Terminal"\n activate\n do script (item 1 of argv)\n end tell\nend run', timeout: 10000 });
+}
+
+module.exports = { check, schedule, status, local, apply, restart, openTerminal };

@@ -27,7 +27,53 @@ function printers() {
   });
 }
 
-function page(cfg) {
+// "Update available" banner with an Update button. Clicking it plays a power-up
+// (Web Audio, no files) and bursts sparks from the button while the agent pulls
+// the new driver and restarts. demo=true renders it even when nothing is new.
+function updateBanner(demo) {
+  const u = require('./update').status();
+  if (!u.available && !demo) return '';
+  const what = demo ? 'demo' : `${esc(u.latest)}${u.message ? ': ' + esc(u.message.split('\n')[0].slice(0, 90)) : ''}`;
+  return `<div id=upd class=upd><div><b>Update available</b> <span class=muted>(${what})</span><div id=updnote class=muted style="margin-top:2px">One click. The console comes back on its own.</div></div>
+<div class=updbtns><button id=updbtn class=updbtn type=button onclick="doUpdate(this,${demo ? 'true' : 'false'})">Update now</button><button id=termbtn class=updbtn type=button style="display:none" onclick="finishInTerminal()">Finish in Terminal</button></div></div>
+<style>
+.upd{position:relative;display:flex;justify-content:space-between;align-items:center;gap:14px;background:#fff7e0;border:1px solid #e3c86a;border-radius:8px;padding:10px 14px;margin:10px 0}
+.updbtns{position:relative;flex:none}
+.updbtn{font:600 13px -apple-system,system-ui;padding:6px 14px;border:0;border-radius:8px;background:#1c2430;color:#fff;cursor:pointer;transition:transform .12s}
+.updbtn:hover{background:#2a3546}.updbtn:disabled{opacity:.6;cursor:default}
+.updbtn.pop{animation:pa-pop .55s cubic-bezier(.3,1.6,.4,1)}
+@keyframes pa-pop{0%{transform:scale(1)}30%{transform:scale(1.28) rotate(-3deg)}60%{transform:scale(.94) rotate(2deg)}100%{transform:scale(1)}}
+.upd.glow{animation:pa-glow .9s ease-out}
+@keyframes pa-glow{0%{box-shadow:0 0 0 0 rgba(255,200,60,.9)}100%{box-shadow:0 0 0 22px rgba(255,200,60,0)}}
+.spark{position:fixed;width:8px;height:8px;border-radius:2px;pointer-events:none;z-index:99;animation:pa-spark .9s cubic-bezier(.1,.8,.3,1) forwards}
+@keyframes pa-spark{0%{transform:translate(0,0) scale(1) rotate(0);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.2) rotate(540deg);opacity:0}}
+.oneup{position:fixed;font:800 22px ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#1c2430;text-shadow:2px 2px 0 #ffd23f,-1px -1px 0 #fff;pointer-events:none;z-index:100;animation:pa-rise 1.6s cubic-bezier(.2,.8,.3,1) forwards;white-space:nowrap}
+@keyframes pa-rise{0%{transform:translate(-50%,0) scale(.6);opacity:0}15%{transform:translate(-50%,-18px) scale(1.15);opacity:1}100%{transform:translate(-50%,-110px) scale(1);opacity:0}}
+</style>
+<script>
+let AC=null;const ac=()=>AC||(AC=new (window.AudioContext||window.webkitAudioContext)());
+function tone(freq,at,dur,type='square',vol=.12){const a=ac(),o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(0,at);g.gain.linearRampToValueAtTime(vol,at+.008);g.gain.exponentialRampToValueAtTime(.0001,at+dur);o.connect(g).connect(a.destination);o.start(at);o.stop(at+dur+.02);}
+function powerUp(){const a=ac();if(a.state==='suspended')a.resume();const t=a.currentTime+.02;[523.25,659.25,783.99,1046.5,1318.5,1567.98].forEach((f,i)=>tone(f,t+i*.07,.13));}
+function fanfare(){const a=ac();const t=a.currentTime+.02;[783.99,1046.5,1318.5,1567.98].forEach((f,i)=>tone(f,t+i*.09,.16));tone(2093,t+.36,.55,'square',.1);tone(1046.5,t+.36,.55,'triangle',.08);}
+function blip(){const a=ac();const t=a.currentTime+.02;tone(659.25,t,.08);tone(523.25,t+.1,.16);}
+function burst(el,n=28){const r=el.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,cols=['#ffd23f','#ff6b35','#3ddc84','#4cc9f0','#ff4fa3','#fff'];for(let i=0;i<n;i++){const s=document.createElement('span');s.className='spark';const ang=Math.random()*Math.PI*2,d=70+Math.random()*120;s.style.left=cx-4+'px';s.style.top=cy-4+'px';s.style.background=cols[i%cols.length];s.style.setProperty('--dx',Math.cos(ang)*d+'px');s.style.setProperty('--dy',Math.sin(ang)*d-40+'px');s.style.animationDelay=(Math.random()*.08)+'s';document.body.appendChild(s);setTimeout(()=>s.remove(),1100);}}
+function rise(el,text){const r=el.getBoundingClientRect(),s=document.createElement('div');s.className='oneup';s.textContent=text;s.style.left=(r.left+r.width/2)+'px';s.style.top=(r.top-6)+'px';document.body.appendChild(s);setTimeout(()=>s.remove(),1700);}
+function pop(el){el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');const b=document.getElementById('upd');b.classList.remove('glow');void b.offsetWidth;b.classList.add('glow');}
+async function doUpdate(btn,demo){const note=document.getElementById('updnote');powerUp();pop(btn);burst(btn);btn.disabled=true;btn.textContent='Updating…';
+  if(demo){setTimeout(()=>{fanfare();burst(btn,40);rise(btn,'1UP  UPDATED!');btn.textContent='Updated';note.textContent='Demo: this is what the real update button does.';},900);return;}
+  note.textContent='Pulling the latest driver…';
+  let r;try{r=await fetch('/api/update',{method:'POST'}).then(r=>r.json());}catch(e){r={error:e.message};}
+  if(r.error){btn.disabled=false;btn.textContent='Update now';note.textContent='Update failed: '+r.error+'. Run "printat update" in Terminal.';return;}
+  if(r.upToDate){blip();rise(btn,'ALREADY LATEST');btn.textContent='Up to date';note.textContent='You already had the newest driver ('+r.to+').';return;}
+  fanfare();burst(btn,40);rise(btn,'1UP  UPDATED!');btn.textContent='Updated';
+  if(r.needsInstall){note.textContent='Got '+r.to+' ('+r.message+'). This one touches the printer backend, so it needs the one-line installer with your password.';document.getElementById('termbtn').style.display='';return;}
+  note.textContent='Got '+r.to+' ('+r.message+'). Restarting…';
+  const t0=Date.now();const poll=async()=>{try{const h=await fetch('/health',{cache:'no-store'}).then(r=>r.json());if(h.update&&h.update.local===r.to){location.href='/';return;}}catch{}if(Date.now()-t0<45000)setTimeout(poll,700);else note.textContent='Restarted, but the console did not come back yet. Reload this page in a moment.';};setTimeout(poll,1500);}
+async function finishInTerminal(){await fetch('/api/update/terminal',{method:'POST'});document.getElementById('updnote').textContent='Terminal is open with "printat update". Enter your password there; the console restarts when it finishes.';}
+</script>`;
+}
+
+function page(cfg, demo = false) {
   const ps = printers();
   const mem = readJson(MEMORY_PATH, []);
   const shops = readJson(SHOP_CACHE_PATH, {});
@@ -47,7 +93,7 @@ form.inline{display:flex;gap:8px;align-items:center;margin-top:10px}
 form.settings{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}form.settings label{display:flex;flex-direction:column;font-size:12px;color:#5b6573;gap:3px}form.settings label input[type=text]{min-width:0;width:100%;box-sizing:border-box}form.settings label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:#1c2430}form.settings div{grid-column:1/-1}input[type=text]{font:13px -apple-system,system-ui;padding:4px 8px;border:1px solid #c9ced5;border-radius:6px;min-width:220px}
 </style>
 <h1>Print@<sup>™</sup> console</h1>
-${(() => { const u = require('./update').status(); return u.available ? `<div style="background:#fff7e0;border:1px solid #e3c86a;border-radius:8px;padding:10px 14px;margin:10px 0"><b>Update available</b> (${esc(u.latest)}${u.message ? ': ' + esc(u.message.split('\n')[0].slice(0, 90)) : ''}). In Terminal: <code>printat update</code></div>` : ''; })()}
+${updateBanner(demo)}
 <div class="muted">Agent on 127.0.0.1:${cfg.port}. Printers also appear in System Settings › Printers &amp; Scanners. · <a href="/near">printers near me (map)</a>${fs.existsSync(SYNC_OUT) ? ' · directory: ' + (readJson(SYNC_OUT, {}).count || 0) + ' printers' : ''}</div>
 
 <h2>Report a problem</h2>
@@ -191,11 +237,18 @@ function handle(req, res, cfg) {
   }
   if (req.method === 'GET' && (url === '/' || url === '/console')) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(page(cfg));
+    res.end(page(cfg, /[?&]juice=1/.test(req.url)));
     return true;
   }
   if (req.method !== 'POST') return false;
   const back = () => { res.writeHead(303, { Location: '/' }); res.end(); };
+  if (url === '/api/update') {
+    const up = require('./update');
+    up.apply().then(r => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); if (r.ok && !r.upToDate && !r.needsInstall) up.restart(); })
+      .catch(e => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); });
+    return true;
+  }
+  if (url === '/api/update/terminal') { require('./update').openTerminal(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); return true; }
   if (url === '/api/bug') {
     let raw = ''; req.on('data', d => raw += d); req.on('end', async () => {
       try { const b = JSON.parse(raw || '{}'); let shotPath = '';

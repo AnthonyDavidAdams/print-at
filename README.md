@@ -80,7 +80,7 @@ answers for places the network has touched. Every job makes the next person's fa
 
 ## Terms and privacy
 
-Use is at your own risk; shops are independent businesses and once a file is sent we can't control
+Print@ is an open-source beta. Use is at your own risk; shops are independent businesses and once a file is sent we can't control
 what happens on their end. Full text: https://printat.co/terms and https://printat.co/privacy.
 
 ## Retention
