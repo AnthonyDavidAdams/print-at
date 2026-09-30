@@ -7,7 +7,22 @@ set -euo pipefail
 REPO="https://github.com/AnthonyDavidAdams/print-at"
 DEST="${PRINTAT_DIR:-$HOME/printat}"
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
-die() { printf '\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
+die() {
+  printf '\033[31m%s\033[0m\n' "$*" >&2
+  # Offer to tell Print@ so the requirement check / message gets better for the next person.
+  local ans="y"; [ -r /dev/tty ] && { read -r -p "Send this to Print@ support (versions + this message)? [Y/n] " ans </dev/tty || ans=y; }
+  case "$ans" in n|N|no|NO) exit 1 ;; esac
+  local email=""; [ -r /dev/tty ] && { read -r -p "Your email, so we can reply (optional): " email </dev/tty || email=""; }
+  MSG="$*" EMAIL="$email" python3 -c 'import json,os,subprocess,urllib.request,platform
+def sh(c):
+    try: return subprocess.run(c,capture_output=True,text=True,timeout=8).stdout.strip()
+    except Exception: return ""
+d={"macos":sh(["sw_vers","-productVersion"]),"arch":platform.machine(),"node":sh(["node","--version"]),"git":sh(["git","--version"]),"xcode_clt":sh(["xcode-select","-p"])}
+b=json.dumps({"email":os.environ["EMAIL"],"source":"installer","description":"Installer stopped: "+os.environ["MSG"],"diagnostics":d}).encode()
+r=urllib.request.urlopen(urllib.request.Request("https://printat.co/api/bugs",data=b,headers={"content-type":"application/json"}),timeout=30)
+j=json.loads(r.read()); print("Sent — ticket #%s."%j.get("id"))' 2>/dev/null || true
+  exit 1
+}
 
 [ "$(uname -s)" = "Darwin" ] || die "Print@ currently supports macOS only. Windows and Linux ports are started — help wanted: $REPO"
 if ! xcode-select -p >/dev/null 2>&1; then

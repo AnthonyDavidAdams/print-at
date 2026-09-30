@@ -166,4 +166,9 @@ const server = http.createServer((req, res) => {
 server.listen(cfg.port, '127.0.0.1', () => {
   log(`Print@ agent listening on 127.0.0.1:${cfg.port}${cfg.dryRun ? ' [DRY RUN]' : ''}${cfg.skipClaude ? ' [NO CLAUDE]' : ''}`);
   update.schedule(cfg);
+  // First run: say what to expect, once.
+  try {
+    const flag = path.join(require('./config').APP_DIR, '.welcomed');
+    if (!fs.existsSync(flag)) { fs.writeFileSync(flag, new Date().toISOString()); require('./ui').notify('Print@ is ready', "Pick 'Print@ Nearby' in any Print dialog. A Print@ window will show the shop it finds."); }
+  } catch {}
 });

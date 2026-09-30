@@ -4,6 +4,35 @@
 # Run with:  sudo ./install.sh      (sudo is needed for the backend + lpadmin)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+PRINTAT_BASE="${PRINTAT_BASE:-https://printat.co}"
+
+# Everything below is logged; if the install fails (or logs a warning) we offer to send the
+# log to Print@ support so the problem gets fixed for the next person too.
+REAL_USER_EARLY="${SUDO_USER:-$USER}"; LOGDIR="$(eval echo "~$REAL_USER_EARLY")/Library/Logs/PrintAt"; mkdir -p "$LOGDIR" 2>/dev/null || LOGDIR=/tmp
+INSTALL_LOG="$LOGDIR/install.log"; : > "$INSTALL_LOG"; chown "$REAL_USER_EARLY" "$INSTALL_LOG" 2>/dev/null || true
+exec > >(tee -a "$INSTALL_LOG") 2>&1
+report_install_problem() {
+  local kind="$1"
+  echo
+  echo "!! Install $kind. The log is at $INSTALL_LOG"
+  local ans="y"
+  if [ -r /dev/tty ]; then read -r -p "Send this log to Print@ support so we can fix it (nothing private; versions + this output)? [Y/n] " ans </dev/tty || ans="y"; fi
+  case "$ans" in n|N|no|NO) echo "Not sent. You can always run: printat bug \"install $kind\""; return 0 ;; esac
+  local email=""; if [ -r /dev/tty ]; then read -r -p "Your email, so we can reply (optional): " email </dev/tty || email=""; fi
+  python3 - "$INSTALL_LOG" "$kind" "$email" "$PRINTAT_BASE" <<'PY' || echo "(could not send; email print@printat.co with the log)"
+import json,sys,subprocess,urllib.request,platform
+log,kind,email,base=sys.argv[1:5]
+tail=open(log,errors='replace').read()[-12000:]
+def sh(c):
+    try: return subprocess.run(c,capture_output=True,text=True,timeout=8).stdout.strip()
+    except Exception: return ''
+diag={'macos':sh(['sw_vers','-productVersion']),'arch':platform.machine(),'node':sh(['node','--version']),'git':sh(['git','--version']),'xcode_clt':sh(['xcode-select','-p']),'install_log_tail':tail}
+body=json.dumps({'email':email,'source':'installer','description':f'Installer {kind} (automatic report)','diagnostics':diag}).encode()
+r=urllib.request.urlopen(urllib.request.Request(base+'/api/bugs',data=body,headers={'content-type':'application/json'}),timeout=30)
+j=json.loads(r.read()); print(f"Sent — ticket #{j.get('id')}."+(f"\nKnown problem: {j.get('title')}\n\n{j.get('answer')}" if j.get('answer') else " A person will look at it."))
+PY
+}
+trap 'report_install_problem "failed at line $LINENO"' ERR
 REAL_USER="${SUDO_USER:-$USER}"
 REAL_HOME="$(eval echo "~$REAL_USER")"
 REAL_UID="$(id -u "$REAL_USER")"
@@ -13,8 +42,8 @@ PRINTER="PrintAt"
 if [ "$(id -u)" -ne 0 ]; then echo "Run with sudo: sudo $0"; exit 1; fi
 
 echo "==> Building location helper and panel"
-sudo -u "$REAL_USER" bash -c "cd '$ROOT/helper' && swiftc -O main.swift -o printat-locate -framework CoreLocation -framework MapKit \
-  -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Info.plist 2>&1 | grep -v warning || true; codesign -s - -f printat-locate; cd '$ROOT/helper/panel' && swiftc -O main.swift -o PrintAtPanel -framework SwiftUI -framework AppKit 2>&1 | grep -v warning || true; mkdir -p PrintAt.app/Contents/MacOS PrintAt.app/Contents/Resources; cp PrintAtPanel PrintAt.app/Contents/MacOS/PrintAtPanel; cp Bundle-Info.plist PrintAt.app/Contents/Info.plist; cp '$ROOT/icon/PrintAt.icns' PrintAt.app/Contents/Resources/PrintAt.icns; codesign -s - -f --deep PrintAt.app; cd '$ROOT/helper/console' && swiftc -O main.swift -o PrintAtConsole -framework AppKit -framework WebKit 2>&1 | grep -v warning || true; rm -rf 'Print@ Console.app'; mkdir -p 'Print@ Console.app/Contents/MacOS' 'Print@ Console.app/Contents/Resources'; cp PrintAtConsole 'Print@ Console.app/Contents/MacOS/'; cp Bundle-Info.plist 'Print@ Console.app/Contents/Info.plist'; cp '$ROOT/icon/PrintAt.icns' 'Print@ Console.app/Contents/Resources/PrintAt.icns'; codesign -s - -f --deep 'Print@ Console.app'; mkdir -p '$REAL_HOME/Applications'; rm -rf '$REAL_HOME/Applications/Print@ Console.app'; cp -R 'Print@ Console.app' '$REAL_HOME/Applications/'"
+sudo -u "$REAL_USER" bash -c "cd '$ROOT/helper' && swiftc -O -suppress-warnings main.swift -o printat-locate -framework CoreLocation -framework MapKit \
+  -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Info.plist 2>&1 | grep -v warning || true; codesign -s - -f printat-locate; cd '$ROOT/helper/panel' && swiftc -O -suppress-warnings main.swift -o PrintAtPanel -framework SwiftUI -framework AppKit 2>&1 | grep -v warning || true; mkdir -p PrintAt.app/Contents/MacOS PrintAt.app/Contents/Resources; cp PrintAtPanel PrintAt.app/Contents/MacOS/PrintAtPanel; cp Bundle-Info.plist PrintAt.app/Contents/Info.plist; cp '$ROOT/icon/PrintAt.icns' PrintAt.app/Contents/Resources/PrintAt.icns; codesign -s - -f --deep PrintAt.app; cd '$ROOT/helper/console' && swiftc -O -suppress-warnings main.swift -o PrintAtConsole -framework AppKit -framework WebKit 2>&1 | grep -v warning || true; rm -rf 'Print@ Console.app'; mkdir -p 'Print@ Console.app/Contents/MacOS' 'Print@ Console.app/Contents/Resources'; cp PrintAtConsole 'Print@ Console.app/Contents/MacOS/'; cp Bundle-Info.plist 'Print@ Console.app/Contents/Info.plist'; cp '$ROOT/icon/PrintAt.icns' 'Print@ Console.app/Contents/Resources/PrintAt.icns'; codesign -s - -f --deep 'Print@ Console.app'; mkdir -p '$REAL_HOME/Applications'; rm -rf '$REAL_HOME/Applications/Print@ Console.app'; cp -R 'Print@ Console.app' '$REAL_HOME/Applications/'"
 
 echo "==> Installing icon + CUPS backend"
 mkdir -p /Library/Printers/Icons
@@ -55,17 +84,28 @@ sed -e "s|__NODE__|$NODE|g" -e "s|__ROOT__|$ROOT|g" -e "s|__HOME__|$REAL_HOME|g"
   "$ROOT/launchd/io.printat.agent.plist.template" > "$PLIST"
 chown "$REAL_USER" "$PLIST"
 launchctl bootout "gui/$REAL_UID/io.printat.agent" 2>/dev/null || true
-launchctl bootstrap "gui/$REAL_UID" "$PLIST"
-sleep 1
-if curl -sf "http://127.0.0.1:4243/health" >/dev/null; then echo "    agent is up"; else echo "    agent did not answer on :4243 — check ~/Library/Logs/PrintAt/"; fi
+sleep 0.5
+# launchd sometimes answers "Bootstrap failed: 5: Input/output error" when the old instance is
+# still winding down; a kickstart right after brings it up. Neither is fatal.
+launchctl bootstrap "gui/$REAL_UID" "$PLIST" 2>/dev/null || launchctl kickstart -k "gui/$REAL_UID/io.printat.agent" 2>/dev/null || true
+for i in 1 2 3 4 5 6; do curl -sf "http://127.0.0.1:4243/health" >/dev/null && break; sleep 1; done
+if curl -sf "http://127.0.0.1:4243/health" >/dev/null; then echo "    agent is up"; else echo "    WARNING: agent did not answer on :4243 — check ~/Library/Logs/PrintAt/"; fi
 
 echo "==> Installing 'printat' command"
 mkdir -p /usr/local/bin 2>/dev/null; ln -sf "$ROOT/bin/printat" /usr/local/bin/printat 2>/dev/null && echo "    /usr/local/bin/printat -> repo" || echo "    (could not symlink; run $ROOT/bin/printat directly)"
 
 echo
 echo "Done. 'Print@ Nearby' is now a printer in every Print dialog. 'Print@ Console' is in ~/Applications."
-echo "Options live under the printer-options section of the Print dialog (Priority, radius, shop type, delivery)."
-echo "Test from a terminal:  lp -d PrintAt -o Priority=Price -o Delivery=Confirm some.pdf"
+echo
+echo "What happens when you hit Print:"
+echo "  1. Choose 'Print@ Nearby' as the printer. Options (closest/cheapest, radius, finishing) are under"
+echo "     Printer Options > Printer Features > Print@ Dispatch. In Chrome, use 'Print using system dialog' to see them."
+echo "  2. A Print@ window opens and shows it locating you and checking nearby shops (a minute or two)."
+echo "  3. It shows the best shop and how the job will be sent; click 'Use this shop' (or it sends automatically if you chose that)."
+echo "  4. The order goes out; the pickup or release code comes back to your email."
+echo "Test from a terminal:  lp -d PrintAt -o Delivery=FindOnly some.pdf   (finds a shop, sends nothing)"
+if grep -qiE "warning|Bootstrap failed|error" "$INSTALL_LOG"; then trap - ERR; report_install_problem "finished with warnings"; fi
+trap - ERR
 echo
 echo "Recommended: connect to the Print@ cloud so jobs dispatch through the network"
 echo "(branded sender, Print@ Network shops, pickup codes — no local email setup):"
