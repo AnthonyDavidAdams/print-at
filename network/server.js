@@ -65,6 +65,7 @@ function asset(res, url) {
 function customerPage(preShop) {
   return page('Print@™ Network', `<div class=head><h1>PRINT<span class=at>@</span></h1><span class=tag><a href="/">Home</a> &middot; <a href="/shop">For shops »</a></span></div>
   <p class=tag>Send a file to a nearby shop. Pick it up with a code.</p>
+  <p class=muted style="margin-top:-6px">Your file is deleted from Print@ the moment the shop marks it picked up, and within 7 days no matter what. Unconfirmed uploads are deleted after 2 hours.</p>
   <div class=card><div class=lab>1 · Documents</div>
     <label>Add PDFs or photos (you can pick several)<input type=file id=file accept="application/pdf,image/*" multiple></label>
     <div id=items></div>
@@ -189,6 +190,24 @@ async function fileTicket(b, source) {
   }
   return { ok: true, id, category: t.category, faq: t.faq ? t.faq.id : null, answer: t.faq ? t.faq.answer : null, title: t.faq ? t.faq.title : null };
 }
+
+// Retention. Customers' documents exist on this server only for the shop to print them:
+// deleted the moment the order is marked picked up, unconfirmed uploads after 2 hours, and
+// anything left after 7 days. Bug-report screenshots go after 30 days. Runs hourly.
+function purgeJobFiles(jobs) {
+  let n = 0;
+  for (const j of jobs) { try { if (j.filepath && fs.existsSync(j.filepath)) fs.unlinkSync(j.filepath); } catch (e) { console.error('purge:', e.message); } db.clearJobFile(j.id); n++; }
+  return n;
+}
+function sweep() {
+  try {
+    const now = Date.now();
+    const n = purgeJobFiles(db.filesToPurge(now));
+    let t = 0; for (const r of db.oldTickets(now)) { try { if (fs.existsSync(r.screenshot)) fs.unlinkSync(r.screenshot); } catch {} db.clearTicketShot(r.id); t++; }
+    if (n || t) console.log(`sweep: removed ${n} job file(s), ${t} screenshot(s)`);
+  } catch (e) { console.error('sweep:', e.message); }
+}
+setTimeout(sweep, 5000); setInterval(sweep, 3600e3).unref();
 
 function jobListing(items) { return items.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n'); }
 function notifyShop(shop, jobs, customerName) {
@@ -550,6 +569,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === 'GET' && url.startsWith('/shop/anyfile/')) {
         const j = db.jobById(Number(url.split('/')[3])); if (!j) return res.writeHead(404).end();
+        if (!j.filepath || !fs.existsSync(j.filepath)) return res.writeHead(410, { 'Content-Type': 'text/html' }), res.end(page('File removed', '<div class=wrap><p>This document was deleted from Print@ after the order was completed.</p></div>'));
         const buf = fs.readFileSync(j.filepath); res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${j.filename}"`}); return res.end(buf);
       }
       if (req.method === 'POST' && /\/shop\/code\/\w+\/done/.test(url)) {
@@ -615,19 +635,21 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === 'GET' && url.startsWith('/shop/file/')) {
         const j = db.jobById(Number(url.split('/')[3])); if (!j || j.shop_id !== shop.id) return res.writeHead(404).end();
+        if (!j.filepath || !fs.existsSync(j.filepath)) return res.writeHead(410, { 'Content-Type': 'text/html' }), res.end(page('File removed', '<div class=wrap><p>This document was deleted from Print@ after the order was completed.</p></div>'));
         const buf = fs.readFileSync(j.filepath); res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${j.filename}"` }); return res.end(buf);
       }
       if (req.method === 'POST' && /\/shop\/group\/\w+\/done/.test(url)) {
         const pc = url.split('/')[3];
         const g = db.jobsForShop(shop.id).filter(j => j.pickup_code === pc);
         for (const j of g) db.setJobStatus(j.id, 'done');
+        purgeJobFiles(g);
         const first = g[0];
         if (first && first.customer_email) mail(first.customer_email, `Your print at ${shop.name} is ready`, `Your ${g.length} file${g.length > 1 ? 's are' : ' is'} printed and ready at ${shop.name}.\n\nHow was it? Rate the shop: ${BASE}/rate/${first.rate_token}`);
         return redirect(res, '/shop/dashboard');
       }
       if (req.method === 'POST' && /\/shop\/job\/\d+\/done/.test(url)) {
         const j = db.jobById(Number(url.split('/')[3])); if (j && j.shop_id === shop.id) {
-          db.setJobStatus(j.id, 'done');
+          db.setJobStatus(j.id, 'done'); purgeJobFiles([j]);
           if (j.customer_email) mail(j.customer_email, `Your print at ${shop.name} is ready`, `Your job is printed and picked up at ${shop.name}.\n\nHow was it? Rate the shop: ${BASE}/rate/${j.rate_token}`);
         }
         return redirect(res, '/shop/dashboard');

@@ -78,6 +78,13 @@ never your documents). Shops nobody has seen yet get a cheap one-time pass on th
 (page fetch + regex + a decision model), so even a driver with `research: none` gets good
 answers for places the network has touched. Every job makes the next person's faster.
 
+## Retention
+
+Orders relayed for a connected driver are never stored: the PDF goes out by email and only the
+metadata (shop, ref, time) is kept. Portal jobs live on the server only so the shop can print them:
+the file is deleted when the shop marks the order picked up, unconfirmed uploads after 2 hours, and
+anything left after 7 days. Bug-report screenshots are deleted after 30 days.
+
 ## Print-dialog options (under the printer-options section, not Page Setup)
 
 | Option | Choices |
