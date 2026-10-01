@@ -120,30 +120,35 @@ async function handle(t) {
     const testRun = spawnSync('./test/run.sh', [], { cwd: s.worktree, encoding: 'utf8', timeout: 10 * 60000 });
     const tests = (testRun.stdout || '') + (testRun.stderr || ''); s.testsPassed = testRun.status === 0; fs.writeFileSync(path.join(RUNS, String(id), 'tests.txt'), tests);
     log(id, `tests ${s.testsPassed ? 'passed' : 'FAILED'}; ${s.files.length} files changed; asking the judges`);
-    const packet = { ticket: `#${id} from ${t.email || '?'} via ${t.source} (${t.category || '?'})\n${t.description}\n\nDiagnostics:\n${(t.diagnostics || '').slice(0, 4000)}`, fixmd: md, diff, tests };
-    const [astra, claude, jev] = await Promise.all([
-      judges.astra(packet).catch(e => ({ approve: false, risk: 'high', summary: 'Astra failed: ' + e.message, concerns: [], must_fix: [] })),
-      Promise.resolve().then(() => judges.claudeReview(s.worktree, packet)).catch(e => ({ approve: false, risk: 'high', summary: 'Claude review failed: ' + e.message, concerns: [], must_fix: [] })),
-      judges.jevScore(packet).catch(e => ({ probability: 0, error: e.message })),
-    ]);
-    s.reviews = { astra, claude, jev }; fs.writeFileSync(path.join(RUNS, String(id), 'reviews.json'), JSON.stringify(s.reviews, null, 2)); save();
-    const ok = s.testsPassed && astra.approve && claude.approve && jev.probability >= JEV_MIN;
-    const verdictLine = `Tests: ${s.testsPassed ? 'pass' : 'FAIL'} · Astra: ${astra.approve ? 'ok' : 'NO'} (${astra.risk}) · Claude: ${claude.approve ? 'ok' : 'NO'} (${claude.risk}) · Jev ${jev.probability.toFixed(2)}`;
-    log(id, verdictLine + (astra.cost ? ` · astra $${astra.cost.toFixed(2)}` : ''));
-    if (ok) {
-      s.stage = 'awaiting-approval'; s.textedAt = Date.now(); save();
-      await note(id, 'fix-ready', `branch ${s.branch}; ${verdictLine}; awaiting maintainer approval`);
-      notify.sendText(`Print@ dev agent · ticket #${id} (${t.email || 'no email'}): fix ready.\nCause: ${fix.cause}\nFix: ${fix.change} (${s.files.length} file${s.files.length === 1 ? '' : 's'}, deploy: ${fix.deploy})\n${verdictLine}\nReply YES ${id} to deploy, NO ${id} to drop.`);
-    } else {
-      s.stage = 'needs-human'; save();
-      const why = [...(astra.must_fix || []).map(x => 'Astra: ' + x), ...(claude.must_fix || []).map(x => 'Claude: ' + x), !s.testsPassed ? 'tests failed' : '', jev.probability < JEV_MIN ? `Jev ${jev.probability.toFixed(2)} < ${JEV_MIN}` : ''].filter(Boolean).slice(0, 5).join('\n');
-      await note(id, 'needs-human', `fix on ${s.branch} did not pass review. ${verdictLine}. ${why}`);
-      notify.sendText(`Print@ dev agent · ticket #${id}: fix on ${s.branch} did NOT pass review.\n${verdictLine}\n${why}\nWorktree: ${s.worktree}`);
-    }
+    await judgeAndAsk(id, t, md, diff, tests);
   } catch (e) {
     s.stage = 'error'; s.error = e.message; save(); log(id, 'ERROR ' + e.message);
     await note(id, 'needs-human', 'dev agent error: ' + e.message.slice(0, 500));
     try { notify.sendText(`Print@ dev agent · ticket #${id}: error. ${e.message.slice(0, 300)}`); } catch {}
+  }
+}
+
+async function judgeAndAsk(id, t, md, diff, tests) {
+  const s = state.tickets[id]; const fix = s.fix;
+  const packet = { ticket: `#${id} from ${t.email || '?'} via ${t.source} (${t.category || '?'})\n${t.description}\n\nDiagnostics:\n${(t.diagnostics || '').slice(0, 4000)}`, fixmd: md, diff, tests };
+  const [astra, claude, jev] = await Promise.all([
+    judges.astra(packet).catch(e => ({ approve: false, risk: 'high', summary: 'Astra failed: ' + e.message, concerns: [], must_fix: [] })),
+    Promise.resolve().then(() => judges.claudeReview(s.worktree, packet)).catch(e => ({ approve: false, risk: 'high', summary: 'Claude review failed: ' + e.message, concerns: [], must_fix: [] })),
+    judges.jevScore(packet).catch(e => ({ probability: 0, error: e.message })),
+  ]);
+  s.reviews = { astra, claude, jev }; fs.writeFileSync(path.join(RUNS, String(id), 'reviews.json'), JSON.stringify(s.reviews, null, 2)); save();
+  const ok = s.testsPassed && astra.approve && claude.approve && jev.probability >= JEV_MIN;
+  const verdictLine = `Tests: ${s.testsPassed ? 'pass' : 'FAIL'} · Astra: ${astra.approve ? 'ok' : 'NO'} (${astra.risk}) · Claude: ${claude.approve ? 'ok' : 'NO'} (${claude.risk}) · Jev ${jev.probability.toFixed(2)}`;
+  log(id, verdictLine + (astra.cost ? ` · astra $${astra.cost.toFixed(2)}` : ''));
+  if (ok) {
+    s.stage = 'awaiting-approval'; s.textedAt = Date.now(); save();
+    await note(id, 'fix-ready', `branch ${s.branch}; ${verdictLine}; awaiting maintainer approval`);
+    notify.sendText(`Print@ dev agent · ticket #${id} (${t.email || 'no email'}): fix ready.\nCause: ${fix.cause}\nFix: ${fix.change} (${s.files.length} file${s.files.length === 1 ? '' : 's'}, deploy: ${fix.deploy})\n${verdictLine}\nReply YES ${id} to deploy, NO ${id} to drop.`);
+  } else {
+    s.stage = 'needs-human'; save();
+    const why = [...(astra.must_fix || []).map(x => 'Astra: ' + x), ...(claude.must_fix || []).map(x => 'Claude: ' + x), !s.testsPassed ? 'tests failed' : '', jev.probability < JEV_MIN ? `Jev ${jev.probability.toFixed(2)} < ${JEV_MIN}` : ''].filter(Boolean).slice(0, 5).join('\n');
+    await note(id, 'needs-human', `fix on ${s.branch} did not pass review. ${verdictLine}. ${why}`);
+    notify.sendText(`Print@ dev agent · ticket #${id}: fix on ${s.branch} did NOT pass review.\n${verdictLine}\n${why}\nWorktree: ${s.worktree}`);
   }
 }
 
@@ -201,6 +206,13 @@ async function once() {
   if (mode === 'approve') return deploy(Number(arg));
   if (mode === 'reject') return reject(Number(arg));
   if (mode === 'status') return console.log(JSON.stringify(state, null, 2));
+  if (mode === 'rejudge') { // judges only, from the saved fix artifacts
+    const id = Number(arg); const s = state.tickets[id]; if (!s || !s.fix) throw new Error('no fix recorded for #' + id);
+    const t = await api(`/api/admin/tickets/${id}`); const dir = path.join(RUNS, String(id));
+    const diff = git(s.worktree, 'diff', 'origin/main...HEAD'); const testRun = spawnSync('./test/run.sh', [], { cwd: s.worktree, encoding: 'utf8', timeout: 10 * 60000 });
+    s.testsPassed = testRun.status === 0; const tests = (testRun.stdout || '') + (testRun.stderr || ''); fs.writeFileSync(path.join(dir, 'tests.txt'), tests);
+    return judgeAndAsk(id, t, fs.readFileSync(path.join(dir, 'FIX.md'), 'utf8'), diff, tests);
+  }
   if (mode === 'watch') {
     log(0, 'watching ' + BASE);
     for (;;) { try { await once(); } catch (e) { log(0, 'cycle error: ' + e.message); } for (let i = 0; i < 10; i++) { await new Promise(r => setTimeout(r, 60000)); try { await checkReplies(); } catch (e) { log(0, e.message); } } }

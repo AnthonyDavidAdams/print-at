@@ -50,8 +50,10 @@ async function jevScore(packet) {
   if (!KEY()) throw new Error('OPENROUTER_API_KEY missing');
   const state = { user_report: packet.ticket.slice(0, 6000), developer_fix_description: packet.fixmd.slice(0, 4000), diff: packet.diff.slice(0, 20000), test_output: packet.tests.slice(-1500) };
   const questions = { resolves: { type: 'noul', instructions: 'Given a user bug report and a developer\'s code change (description + diff), does the change resolve what the user reported? It holds when the diff changes the code path the report describes, in a way that would make the reported symptom stop, and the tests exercise it.' } };
-  const r = await fetch('https://openrouter.ai/api/alpha/decisions', { method: 'POST', headers: { authorization: `Bearer ${KEY()}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: JEV, state, questions }), signal: AbortSignal.timeout(30000) });
-  const j = await r.json();
+  let r, j; for (let attempt = 0; ; attempt++) { // Jev takes longer on a full diff; retry one timeout
+    try { r = await fetch('https://openrouter.ai/api/alpha/decisions', { method: 'POST', headers: { authorization: `Bearer ${KEY()}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: JEV, state, questions }), signal: AbortSignal.timeout(120000) }); j = await r.json(); break; }
+    catch (e) { if (attempt >= 1) throw e; }
+  }
   if (!r.ok || !j.answers) throw new Error('jev: ' + JSON.stringify(j).slice(0, 200));
   const a = j.answers.resolves; const p = typeof a === 'number' ? a : (a && (a.noul ?? a.probability ?? a.confidence)); // noul answers look like { type: 'noul', noul: 0.68 }
   return { probability: Number(p) || 0, cost: (j.usage && j.usage.cost) || 0, raw: a };
