@@ -237,7 +237,7 @@ async function run(job, cfg, report = () => {}) {
         let out, viaCloud = false;
         if (cloud.connected(cfg)) {
           try {
-            const r = await cloud.dispatchEmail(cfg, { to: s.email, cc, subject, body, pdfPath: job.pdf, shop: pick, meta: { pages: spec.pages, copies: spec.copies, color: spec.color } });
+            const r = await cloud.dispatchEmail(cfg, { to: s.email, cc, subject, body, pdfPath: job.pdf, shop: pick, meta: { pages: spec.pages, copies: spec.copies, color: spec.color, duplex: spec.duplex, name: cfg.contactName }, cover: !releaseStyle });
             out = `Print@ cloud (ref ${r.ref})`; viaCloud = true;
           } catch (e) {
             // A timeout or dropped connection is AMBIGUOUS: the email may have gone out. Never

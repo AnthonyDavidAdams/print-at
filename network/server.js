@@ -10,6 +10,7 @@ const mail = require('./mail');
 const shopResearch = require('./research');
 const FAQ = require('./faq');
 const legal = require('./legal');
+const cover = require('./cover');
 const qr = require('./qr');
 
 const PORT = process.env.PORT || 4260;
@@ -306,6 +307,12 @@ const server = http.createServer(async (req, res) => {
       const jobs = gid ? db.releaseGroup(gid) : [];
       if (!jobs.length) return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Link expired', `<div class=head><h1>PRINT<span class=at>@</span></h1></div><div class=card><p>That link expired or was already used. <a href="/app">Send the job again</a>.</p></div>`));
       const shop = db.shopById(jobs[0].shop_id); const first = jobs[0];
+      // Cover sheet goes on the front of each PDF now that the job is real.
+      for (const j of jobs) {
+        if (!j.filepath || !fs.existsSync(j.filepath)) continue;
+        try { const c = await cover.withCover(fs.readFileSync(j.filepath), { name: first.customer_name, email: first.customer_email, code: first.pickup_code, shop: shop.name, filename: j.filename, copies: j.copies, color: !!j.color }); if (c.merged) { fs.writeFileSync(j.filepath, c.buffer); db.setJobPages(j.id, c.pages); j.pages = c.pages; } }
+        catch (e) { console.error('cover sheet:', e.message); }
+      }
       notifyShop(shop, jobs, first.customer_name);
       mail(first.customer_email, `Your pickup code for ${shop.name}: ${first.pickup_code}`,
         `Your ${jobs.length} file${jobs.length > 1 ? 's are' : ' is'} on the way to ${shop.name}${shop.address ? ', ' + shop.address : ''}.\n\nPickup code: ${first.pickup_code}\n\nShow it at the counter. Reply to this email if you have a question about the order.`);
@@ -369,9 +376,17 @@ const server = http.createServer(async (req, res) => {
       if (String(b.fileB64).length > 25e6) return json(res, 413, { error: 'file too large' });
       const ref = 'PA-' + db.rid(6).toUpperCase();
       db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref, status: 'sending' });
+      // Cover sheet on the front (name, pickup code, pages, our message slot) unless the
+      // driver opted out (kiosk/release-style destinations, where the customer prints it themselves).
+      let fileBuf = Buffer.from(b.fileB64, 'base64');
+      const m = b.meta || {};
+      if (b.cover !== false) {
+        try { const c = await cover.withCover(fileBuf, { name: m.name || dev.name || '', email: dev.email, code: ref, ref, shop: b.shop && b.shop.name, filename: b.filename || 'document.pdf', pages: Number(m.pages) || 0, copies: Number(m.copies) || 1, color: !!m.color, duplex: !!m.duplex }); fileBuf = c.buffer; }
+        catch (e) { console.error('cover sheet:', e.message); }
+      }
       try {
-        await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Just reply to this email and it reaches them.`,
-          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: Buffer.from(b.fileB64, 'base64') }, replyAddr('job', ref));
+        await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Just reply to this email and it reaches them.${b.cover !== false ? ' The first page of the attachment is a cover sheet with the pickup name and code.' : ''}`,
+          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: fileBuf }, replyAddr('job', ref));
       } catch (e) { db.setDispatchStatus(ref, 'failed'); return json(res, 502, { error: 'send failed: ' + e.message }); }
       db.setDispatchStatus(ref, 'sent');
       return json(res, 200, { ok: true, ref });

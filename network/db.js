@@ -122,6 +122,7 @@ module.exports = {
   // directory dispatches (driver relayed a job by email through the cloud)
   // retention: purge user files as soon as they are no longer needed
   filesToPurge(now_) { return db.prepare("SELECT id, filepath, status, created FROM jobs WHERE filepath!='' AND (status='done' OR (status='pending' AND created < ?) OR created < ?)").all(now_ - 2 * 3600e3, now_ - 7 * 864e5); },
+  setJobPages(id, pages) { db.prepare('UPDATE jobs SET pages=? WHERE id=?').run(pages, id); },
   clearJobFile(id) { db.prepare("UPDATE jobs SET filepath='' WHERE id=?").run(id); },
   oldTickets(now_) { return db.prepare("SELECT id, screenshot FROM tickets WHERE screenshot!='' AND created < ?").all(now_ - 30 * 864e5); },
   clearTicketShot(id) { db.prepare("UPDATE tickets SET screenshot='' WHERE id=?").run(id); },

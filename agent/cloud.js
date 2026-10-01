@@ -53,13 +53,13 @@ async function sendNetworkJob(cfg, { networkId, items, name, email }) {
 
 // Dispatch a directory job (chain/PrinterOn/PrintMe/library email) THROUGH the cloud so the
 // email is sent from printat.co, not the user's inbox. Returns { ok, tracking }.
-async function dispatchEmail(cfg, { to, cc, subject, body, pdfPath, shop, meta }) {
+async function dispatchEmail(cfg, { to, cc, subject, body, pdfPath, shop, meta, cover = true }) {
   const fileB64 = fs.readFileSync(pdfPath).toString('base64');
   const filename = require('path').basename(pdfPath);
   return api(cfg, '/api/dispatch', { method: 'POST', timeout: 60000, body: JSON.stringify({
     to, cc, subject, body, filename, fileB64,
     shop: shop ? { name: shop.name, address: shop.address, lat: shop.lat, lon: shop.lon } : null,
-    meta: meta || {},
+    meta: meta || {}, cover: cover !== false,
   }) });
 }
 
