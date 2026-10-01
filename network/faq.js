@@ -25,7 +25,7 @@ module.exports = [
   { id: 'shop-reply', title: 'How do I hear back from the shop?', match: 'Waiting for the shop to reply, price confirmation, pickup code, release code',
     answer: "Orders go out from print@printat.co with a reply address that routes straight back to you, so the shop's reply lands in your inbox. Chains and kiosks send a release code by email instead. Check spam once; the receipt on your Mac also has the shop's phone." },
   { id: 'update', title: 'How do I update?', match: 'Update, new version, latest, upgrade the driver',
-    answer: "`printat update` pulls the latest driver and reinstalls. Re-running the installer does the same. The driver checks daily and tells you when there is something new." },
+    answer: "The driver checks daily and shows an Update available banner in the console at http://127.0.0.1:4243/ with an Update now button; one click pulls the new version and restarts the agent. From Terminal, `printat update` does the same (and re-running the installer too)." },
   { id: 'uninstall', title: 'How do I uninstall?', match: 'Remove Print@, uninstall, delete the printer',
     answer: "`~/printat/uninstall.sh` removes the printer, backend and agent. Delete ~/printat afterwards if you want the code gone too." },
   { id: 'cost', title: 'What does it cost?', match: 'Price, cost, free, subscription, billing',
