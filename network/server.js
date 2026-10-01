@@ -381,7 +381,7 @@ const server = http.createServer(async (req, res) => {
       let fileBuf = Buffer.from(b.fileB64, 'base64');
       const m = b.meta || {};
       if (b.cover !== false) {
-        try { const c = await cover.withCover(fileBuf, { name: m.name || dev.name || '', email: dev.email, code: ref, ref, shop: b.shop && b.shop.name, filename: b.filename || 'document.pdf', pages: Number(m.pages) || 0, copies: Number(m.copies) || 1, color: !!m.color, duplex: !!m.duplex }); fileBuf = c.buffer; }
+        try { const c = await cover.withCover(fileBuf, { name: m.name || dev.name || '', email: dev.email, code: ref, ref, shop: b.shop && b.shop.name, filename: b.filename || 'document.pdf', pages: Number(m.pages) || 0, copies: Number(m.copies) || 1, color: !!m.color, duplex: !!m.duplex, tz: m.tz }); fileBuf = c.buffer; }
         catch (e) { console.error('cover sheet:', e.message); }
       }
       try {
