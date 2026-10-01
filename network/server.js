@@ -177,7 +177,7 @@ function helpPage(msg = '') {
   <script>
   document.getElementById('ask').onclick=async()=>{const q=document.getElementById('q').value.trim();if(!q)return;const a=document.getElementById('ans');a.innerHTML='<div class=muted>Thinking…</div>';
     const r=await fetch('/api/help/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({q})}).then(r=>r.json());
-    a.innerHTML=r.answer?'<div class=ans><b>'+r.title+'</b>\n\n'+r.answer.replace(/</g,'&lt;')+'</div>':'<div class=ans style="background:#fff7e0;border-color:#d09a3c">Not a known one. Send it as a report below and a person will answer by email.</div>';};
+    a.innerHTML=r.answer?'<div class=ans><b>'+r.title+'</b><br><br>'+r.answer.replace(/</g,'&lt;')+'</div>':'<div class=ans style="background:#fff7e0;border-color:#d09a3c">Not a known one. Send it as a report below and a person will answer by email.</div>';};
   document.getElementById('bug').onsubmit=async e=>{e.preventDefault();const f=e.target;const note=document.getElementById('note');note.textContent='Sending…';
     const file=f.shot.files[0];let shot=null;if(file){shot=await new Promise(res=>{const rd=new FileReader();rd.onload=()=>res({name:file.name,b64:rd.result.split(',')[1]});rd.readAsDataURL(file)});}
     const r=await fetch('/api/bugs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:f.email.value,description:f.description.value,source:'web',screenshot:shot})}).then(r=>r.json());
@@ -786,3 +786,5 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { json(res, 500, { error: e.message }); }
 });
 server.listen(PORT, () => console.log(`Print@ Network on :${PORT}`));
+// Rendered pages for tests (test/regress/page-scripts-parse.js checks every inline script parses).
+module.exports = { pages: () => ({ landing: LANDING, customer: customerPage(null), help: helpPage(), terms: page('Terms', legal.TERMS), privacy: page('Privacy', legal.PRIVACY) }) };

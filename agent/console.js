@@ -291,4 +291,4 @@ function handle(req, res, cfg) {
   return false;
 }
 
-module.exports = { handle, printers };
+module.exports = { handle, printers, page };
