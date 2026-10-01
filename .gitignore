@@ -25,3 +25,7 @@ data/library-print.json
 network/directory/
 network/email-worker/node_modules/
 network/email-worker/.wrangler/
+
+# dev agent runtime state
+devagent/state.json
+devagent/runs/

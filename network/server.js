@@ -392,6 +392,30 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, ref });
     }
 
+    // ---- DEV AGENT (devagent/run.js on the maintainer's Mac) ----
+    // Reads open tickets, records what it did, and replies to the reporter once a fix ships.
+    if (url.startsWith('/api/admin/tickets')) {
+      if (!ADMIN_SECRET || req.headers['x-printat-admin'] !== ADMIN_SECRET) return json(res, 401, { error: 'bad secret' });
+      const m = url.match(/^\/api\/admin\/tickets(?:\/(\d+)(\/reply)?)?$/);
+      if (!m) return json(res, 404, { error: 'not found' });
+      if (req.method === 'GET' && !m[1]) return json(res, 200, { tickets: db.ticketsByStatus(q.status || 'open').map(t => ({ ...t, screenshot: !!t.screenshot })) });
+      if (req.method === 'GET' && m[1] && !m[2]) { const t = db.ticket(Number(m[1])); return t ? json(res, 200, { ...t, screenshot: !!t.screenshot }) : json(res, 404, { error: 'no ticket' }); }
+      if (req.method === 'POST' && m[1]) {
+        const t = db.ticket(Number(m[1])); if (!t) return json(res, 404, { error: 'no ticket' });
+        const b = JSON.parse((await body(req)).toString() || '{}');
+        if (m[2]) { // reply to the reporter
+          if (!t.email) return json(res, 400, { error: 'ticket has no email' });
+          const text = String(b.text || '').slice(0, 10000); if (!text) return json(res, 400, { error: 'text' });
+          await mail(t.email, b.subject || `Re: your Print@ report (#${t.id})`, text + `\n\n— Print@ support. Reply to this email if it is still not working.`, legal.CONTACT);
+          return json(res, 200, { ok: true });
+        }
+        if (b.status) db.setTicketStatus(t.id, String(b.status).slice(0, 30));
+        if (b.notes !== undefined) db.setTicketNotes(t.id, b.notes);
+        return json(res, 200, { ok: true });
+      }
+      return json(res, 405, { error: 'method' });
+    }
+
     // The public-printer directory, for connected drivers only (this is the asset).
     // Lives on the persistent volume (PRINTAT_NET_DIR/directory), uploaded by the
     // maintainer with PUT /api/admin/directory/<name> (x-printat-admin: PRINTAT_ADMIN_SECRET);

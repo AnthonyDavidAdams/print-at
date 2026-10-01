@@ -37,6 +37,7 @@ db.exec(`
     to_email TEXT, subject TEXT, filename TEXT, ref TEXT, status TEXT DEFAULT 'sent', created INTEGER);
 `);
 try { db.exec('ALTER TABLE jobs ADD COLUMN group_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE tickets ADD COLUMN dev_notes TEXT'); } catch {}
 const now = () => Date.now();
 const rid = (n = 16) => require('crypto').randomBytes(n).toString('hex');
 const code = () => { for (let i = 0; i < 50; i++) { const c = String(require('crypto').randomInt(100000, 1000000)); if (!db.prepare("SELECT 1 FROM jobs WHERE pickup_code=? AND status!='done' LIMIT 1").get(c)) return c; } return String(require('crypto').randomInt(100000, 1000000)); };
@@ -149,6 +150,8 @@ module.exports = {
   ticket: id => db.prepare('SELECT * FROM tickets WHERE id=?').get(id),
   tickets: () => db.prepare('SELECT id,email,source,category,faq_id,faq_confidence,status,created,substr(description,1,140) AS description FROM tickets ORDER BY id DESC LIMIT 200').all(),
   setTicketStatus(id, status) { db.prepare('UPDATE tickets SET status=? WHERE id=?').run(status, id); },
+  ticketsByStatus: status => db.prepare('SELECT * FROM tickets WHERE status=? ORDER BY id ASC LIMIT 50').all(status),
+  setTicketNotes(id, notes) { db.prepare('UPDATE tickets SET dev_notes=? WHERE id=?').run(String(notes || '').slice(0, 20000), id); },
   dispatchByRef: r => db.prepare('SELECT * FROM dispatches WHERE ref=? ORDER BY id DESC').get(String(r || '').toUpperCase()),
   setDispatchStatus(ref, status) { db.prepare('UPDATE dispatches SET status=? WHERE ref=?').run(status, ref); },
   logReply(r) { db.prepare('INSERT INTO replies(kind,ref,from_email,to_email,forwarded_to,subject,text,created) VALUES(?,?,?,?,?,?,?,?)').run(r.kind, r.ref, r.from_email, r.to_email, r.forwarded_to || '', r.subject || '', (r.text || '').slice(0, 20000), now()); },
