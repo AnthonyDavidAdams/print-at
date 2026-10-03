@@ -1,0 +1,5 @@
+Print@ turns any print shop, hotel or library printer near you into a printer in your Print dialog.
+
+This installer downloads the open-source driver into ~/printat, builds two small helpers, and registers "Print@ Nearby" as a printer. It needs the Xcode Command Line Tools and Node.js 22 or newer; if either is missing it will say so and point you to it.
+
+Print@ is an open-source beta, provided as-is, use at your own risk. By installing you agree to https://printat.co/terms (privacy: https://printat.co/privacy).

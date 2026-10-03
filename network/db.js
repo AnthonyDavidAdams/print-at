@@ -36,6 +36,11 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS dispatches(id INTEGER PRIMARY KEY, device_token TEXT, email TEXT, shop_name TEXT, shop_address TEXT,
     to_email TEXT, subject TEXT, filename TEXT, ref TEXT, status TEXT DEFAULT 'sent', created INTEGER);
 `);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS installs(id INTEGER PRIMARY KEY, install_id TEXT, kind TEXT, version TEXT, macos TEXT, arch TEXT, node TEXT, ip TEXT, created INTEGER);
+  CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, kind TEXT, detail TEXT, created INTEGER);
+  CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
+`);
 try { db.exec('ALTER TABLE jobs ADD COLUMN group_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE tickets ADD COLUMN dev_notes TEXT'); } catch {}
 const now = () => Date.now();
@@ -145,6 +150,32 @@ module.exports = {
   },
   recordOutcome(key, outcome) { db.prepare("UPDATE shop_facts SET confirmations=confirmations+?, last_outcome=?, confidence=MIN(0.99, confidence+?), updated=? WHERE key=?").run(outcome === 'sent' || outcome === 'picked_up' ? 1 : 0, outcome, outcome === 'picked_up' ? 0.1 : outcome === 'sent' ? 0.05 : outcome === 'bounced' || outcome === 'failed' ? -0.3 : 0, now(), key); },
   recordConsent(subject, surface, version, ip) { db.prepare('INSERT INTO consents(subject,surface,version,ip,created) VALUES(?,?,?,?,?)').run(String(subject || '').toLowerCase(), surface, version, ip || '', now()); },
+  // installs, events (downloads etc.), meta, and the weekly numbers
+  recordInstall(i) { db.prepare('INSERT INTO installs(install_id,kind,version,macos,arch,node,ip,created) VALUES(?,?,?,?,?,?,?,?)').run(i.install_id || '', i.kind || 'new', i.version || '', i.macos || '', i.arch || '', i.node || '', i.ip || '', now()); return db.prepare('SELECT COUNT(DISTINCT install_id) AS n FROM installs').get().n; },
+  event(kind, detail = '') { db.prepare('INSERT INTO events(kind,detail,created) VALUES(?,?,?)').run(kind, String(detail).slice(0, 200), now()); },
+  getMeta(k) { const r = db.prepare('SELECT value FROM meta WHERE key=?').get(k); return r ? r.value : null; },
+  setMeta(k, v) { db.prepare('INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k, String(v)); },
+  stats(since) {
+    const one = (sql, ...a) => db.prepare(sql).get(...a); const all = (sql, ...a) => db.prepare(sql).all(...a);
+    return {
+      installsNew: one("SELECT COUNT(*) AS n FROM installs WHERE kind='new' AND created>=?", since).n,
+      installsUpdate: one("SELECT COUNT(*) AS n FROM installs WHERE kind<>'new' AND created>=?", since).n,
+      installsTotal: one('SELECT COUNT(DISTINCT install_id) AS n FROM installs').n,
+      downloads: one("SELECT COUNT(*) AS n FROM events WHERE kind='download' AND created>=?", since).n,
+      connects: one('SELECT COUNT(*) AS n FROM devices WHERE created>=?', since).n,
+      devicesTotal: one('SELECT COUNT(*) AS n FROM devices').n,
+      dispatches: one("SELECT COUNT(*) AS n FROM dispatches WHERE created>=? AND status='sent'", since).n,
+      dispatchShops: all("SELECT shop_name AS name, COUNT(*) AS n FROM dispatches WHERE created>=? AND status='sent' GROUP BY shop_name ORDER BY n DESC LIMIT 15", since),
+      dispatchUsers: one("SELECT COUNT(DISTINCT email) AS n FROM dispatches WHERE created>=? AND status='sent'", since).n,
+      portalJobs: one("SELECT COUNT(*) AS n FROM jobs WHERE created>=? AND status<>'pending'", since).n,
+      portalShops: all("SELECT s.name, COUNT(*) AS n FROM jobs j JOIN shops s ON s.id=j.shop_id WHERE j.created>=? AND j.status<>'pending' GROUP BY s.name ORDER BY n DESC LIMIT 15", since),
+      newShops: all('SELECT name, city, state FROM shops WHERE created>=? ORDER BY id DESC LIMIT 20', since),
+      shopsTotal: one('SELECT COUNT(*) AS n FROM shops').n,
+      tickets: all('SELECT status, COUNT(*) AS n FROM tickets WHERE created>=? GROUP BY status', since),
+      ticketsOpen: one("SELECT COUNT(*) AS n FROM tickets WHERE status IN ('open','needs-human')").n,
+      facts: one('SELECT COUNT(*) AS n FROM shop_facts').n,
+    };
+  },
   // support tickets
   createTicket(t) { const r = db.prepare('INSERT INTO tickets(email,source,description,diagnostics,screenshot,category,faq_id,faq_confidence,status,created) VALUES(?,?,?,?,?,?,?,?,?,?)').run(t.email || '', t.source || 'web', t.description || '', t.diagnostics || '', t.screenshot || '', t.category || '', t.faq_id || '', t.faq_confidence ?? null, t.status || 'open', now()); return r.lastInsertRowid; },
   ticket: id => db.prepare('SELECT * FROM tickets WHERE id=?').get(id),

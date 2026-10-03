@@ -118,6 +118,15 @@ if [ -r /dev/tty ] && [ -f "$ROOT/test/sample-boarding-pass.pdf" ]; then
 fi
 if grep -qiE "warning|Bootstrap failed|error" "$INSTALL_LOG"; then trap - ERR; report_install_problem "finished with warnings"; fi
 trap - ERR
+# Tell Print@ an install finished (versions only, no personal data) so the maintainer hears about it.
+IDF="$REAL_HOME/Library/Application Support/PrintAt/install-id"; KIND=update
+[ -s "$IDF" ] || { KIND=new; sudo -u "$REAL_USER" sh -c "mkdir -p '$(dirname "$IDF")'; umask 077; head -c 16 /dev/urandom | xxd -p > '$IDF'" 2>/dev/null || true; }
+INSTALL_ID="$(cat "$IDF" 2>/dev/null || echo unknown)" KIND="$KIND" VERSION="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo ?)" NODEV="$("$NODE" --version 2>/dev/null || echo ?)" PRINTAT_BASE="$PRINTAT_BASE" python3 - <<'PY' >/dev/null 2>&1 || true
+import json,os,platform,subprocess,urllib.request
+macos=subprocess.run(["sw_vers","-productVersion"],capture_output=True,text=True).stdout.strip()
+b=json.dumps({"install_id":os.environ["INSTALL_ID"],"kind":os.environ["KIND"],"version":os.environ["VERSION"],"macos":macos,"arch":platform.machine(),"node":os.environ["NODEV"]}).encode()
+urllib.request.urlopen(urllib.request.Request(os.environ["PRINTAT_BASE"]+"/api/install",data=b,headers={"content-type":"application/json"}),timeout=15)
+PY
 echo
 echo "Recommended: connect to the Print@ cloud so jobs dispatch through the network"
 echo "(branded sender, Print@ Network shops, pickup codes — no local email setup):"

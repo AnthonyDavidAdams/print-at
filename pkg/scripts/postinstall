@@ -1,0 +1,19 @@
+#!/bin/bash
+# Print@ installer package: the same install as `curl -fsSL https://printat.co/install.sh | bash`,
+# run by macOS Installer (as root) for the person logged in at the console.
+U="$(stat -f %Su /dev/console)"; H="$(dscl . -read "/Users/$U" NFSHomeDirectory | sed 's/^[^ ]* //')"
+LOG=/tmp/printat-pkg.log; : > "$LOG"; chmod 644 "$LOG"
+say() { sudo -u "$U" osascript -e "display dialog \"$1\" with title \"Print@\" buttons {\"OK\"} default button 1 with icon $2" >/dev/null 2>&1 || true; }
+if ! xcode-select -p >/dev/null 2>&1; then
+  sudo -u "$U" xcode-select --install >/dev/null 2>&1 || true
+  say "Print@ needs the Xcode Command Line Tools (a free download from Apple). Install them from the window that just opened, then run this installer again." caution; exit 1
+fi
+NODE="$(sudo -u "$U" -i which node 2>/dev/null || true)"
+if [ -z "$NODE" ]; then sudo -u "$U" open "https://nodejs.org"; say "Print@ needs Node.js 22 or newer (free). Install it from the page that just opened, then run this installer again." caution; exit 1; fi
+{
+  if [ -d "$H/printat/.git" ]; then sudo -u "$U" -i git -C "$H/printat" pull --ff-only -q || true
+  else sudo -u "$U" -i git clone -q https://github.com/AnthonyDavidAdams/print-at "$H/printat"; fi
+  SUDO_USER="$U" bash "$H/printat/install.sh"
+} >> "$LOG" 2>&1 || { say "The Print@ install hit a problem. The log is at /tmp/printat-pkg.log and a report went to Print@ support; help is at printat.co/help." stop; exit 1; }
+sudo -u "$U" open "http://127.0.0.1:4243/" >/dev/null 2>&1 || true
+exit 0

@@ -1,0 +1,7 @@
+Print@ Nearby is now a printer in every app. Print anything, pick "Print@ Nearby", and a window finds a shop near you.
+
+Recommended next step: open Terminal and run
+    printat connect you@email
+so jobs go out through the Print@ cloud with pickup codes and the full printer directory.
+
+Help and bug reports: https://printat.co/help

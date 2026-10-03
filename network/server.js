@@ -237,6 +237,43 @@ function notifyShop(shop, jobs, customerName) {
     replyAddr('order', jobs[0].pickup_code));
 }
 
+// ---- WEEKLY REPORT ----
+// Monday morning (Pacific) mail to the maintainer: installs, connects, prints, shops, tickets.
+function weeklyReportText(days = 7) {
+  const since = Date.now() - days * 864e5; const st = db.stats(since);
+  const list = (rows, f) => rows.length ? rows.map(f).join('\n') : '  (none)';
+  return `Print@ week in review · ${new Date(since).toISOString().slice(0, 10)} to ${new Date().toISOString().slice(0, 10)}
+
+INSTALLS
+  New Macs: ${st.installsNew}   Updates: ${st.installsUpdate}   Installer downloads: ${st.downloads}
+  Connected this week: ${st.connects}
+  Totals: ${st.installsTotal} Macs installed, ${st.devicesTotal} connected
+
+PRINTS
+  Driver dispatches: ${st.dispatches} (from ${st.dispatchUsers} people)
+${list(st.dispatchShops, r => `  ${r.n} × ${r.name || '(unnamed)'}`)}
+  Portal jobs: ${st.portalJobs}
+${list(st.portalShops, r => `  ${r.n} × ${r.name}`)}
+
+NETWORK
+  New shops: ${st.newShops.length} (total ${st.shopsTotal})
+${list(st.newShops, r => `  ${r.name}${r.city ? ', ' + r.city : ''}${r.state ? ' ' + r.state : ''}`)}
+  Pooled shop facts: ${st.facts}
+
+SUPPORT
+  Tickets this week: ${st.tickets.map(t => `${t.n} ${t.status}`).join(', ') || 'none'}   Open now: ${st.ticketsOpen}
+  ${BASE}/admin/bugs`;
+}
+async function sendWeeklyReport(force = false) {
+  const last = Number(db.getMeta('weekly_report_at') || 0);
+  const d = new Date(); const monday = d.getUTCDay() === 1 && d.getUTCHours() >= 15; // 8am Pacific
+  if (!force && !(monday && Date.now() - last > 6 * 864e5)) return null;
+  const text = weeklyReportText();
+  if (FALLBACK_INBOX) { await mail(FALLBACK_INBOX, `[Print@] Week in review: ${db.stats(Date.now() - 7 * 864e5).installsNew} installs, ${db.stats(Date.now() - 7 * 864e5).dispatches + db.stats(Date.now() - 7 * 864e5).portalJobs} prints`, text); db.setMeta('weekly_report_at', Date.now()); }
+  return text;
+}
+setInterval(() => sendWeeklyReport().catch(e => console.error('weekly report:', e.message)), 3600e3).unref();
+
 const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   const q = Object.fromEntries(new URL(req.url, BASE).searchParams);
@@ -346,6 +383,7 @@ const server = http.createServer(async (req, res) => {
       const row = db.confirmDevicePoll(q.c);
       if (!row) return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Link expired', `<div class=head><h1>PRINT<span class=at>@</span></h1></div><div class=card><p>That link expired or was already used. Run <b>printat connect</b> on your Mac again.</p></div>`));
       db.recordConsent(row.email, 'device', legal.VERSION, clientIp(req));
+      if (FALLBACK_INBOX) { const n = db.stats(0).devicesTotal; mail(FALLBACK_INBOX, `[Print@] Connected: ${row.email} (${row.device || 'a Mac'}) · device #${n}`, `${row.email} connected ${row.device || 'a Mac'} to the Print@ cloud.\nConnected devices so far: ${n}.\n\n${BASE}/admin/bugs`).catch(e => console.error('connect mail:', e.message)); }
       return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page('Device connected', `<div class=head><h1>PRINT<span class=at>@</span></h1></div>
         <div class=card><div class=lab>Connected</div><p><b>${esc(row.device || 'Your Mac')}</b> is now linked to Print@ as <b>${esc(row.email)}</b>.</p>
         <p class=muted>By connecting you agree to the <a href="/terms">Terms of Use</a> and <a href="/privacy">Privacy Policy</a>.</p>
@@ -456,6 +494,28 @@ const server = http.createServer(async (req, res) => {
       const b = JSON.parse((await body(req)).toString() || '{}');
       const t = await triage(String(b.q || ''));
       return json(res, 200, t.faq ? { answer: t.faq.answer, title: t.faq.title, id: t.faq.id, confidence: t.confidence } : { answer: null, confidence: t.confidence });
+    }
+    // Installer success ping (install.sh, end): counts installs and tells the maintainer right away.
+    if (req.method === 'POST' && url === '/api/install') {
+      if (limited('install:' + clientIp(req), 10, 3600e3)) return json(res, 429, { error: 'slow down' });
+      const b = JSON.parse((await body(req)).toString() || '{}');
+      const i = { install_id: String(b.install_id || '').slice(0, 40), kind: /^(new|update)$/.test(b.kind) ? b.kind : 'new', version: String(b.version || '').slice(0, 12), macos: String(b.macos || '').slice(0, 20), arch: String(b.arch || '').slice(0, 10), node: String(b.node || '').slice(0, 12), ip: clientIp(req) };
+      const n = db.recordInstall(i);
+      if (FALLBACK_INBOX) mail(FALLBACK_INBOX, `[Print@] ${i.kind === 'new' ? 'New install' : 'Update'} · macOS ${i.macos} ${i.arch} · driver ${i.version} · ${n} Macs total`,
+        `${i.kind === 'new' ? 'A new Mac installed the Print@ driver.' : 'A Mac updated the Print@ driver.'}\n\nmacOS ${i.macos} (${i.arch}), Node ${i.node}, driver ${i.version}.\nDistinct Macs that have installed: ${n}. Connected devices: ${db.stats(0).devicesTotal}.\n\nThey will show up as "Connected" when they run printat connect.`).catch(e => console.error('install mail:', e.message));
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === 'GET' && url === '/download/PrintAt.pkg') {
+      const file = path.join(DOCS, 'assets', 'PrintAt.pkg');
+      if (!fs.existsSync(file)) return res.writeHead(404).end('no installer built');
+      db.event('download', clientIp(req));
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="PrintAt.pkg"', 'Cache-Control': 'no-cache' });
+      return res.end(fs.readFileSync(file));
+    }
+    if (req.method === 'POST' && url === '/api/admin/report') {
+      if (!ADMIN_SECRET || req.headers['x-printat-admin'] !== ADMIN_SECRET) return json(res, 401, { error: 'bad secret' });
+      const text = await sendWeeklyReport(true);
+      return json(res, 200, { ok: true, text });
     }
     if (req.method === 'POST' && url === '/api/bugs') {
       if (limited('bugs:' + clientIp(req), 10, 3600e3)) return json(res, 429, { error: 'too many reports; try again later' });

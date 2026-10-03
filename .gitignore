@@ -29,3 +29,4 @@ network/email-worker/.wrangler/
 # dev agent runtime state
 devagent/state.json
 devagent/runs/
+pkg/build/
