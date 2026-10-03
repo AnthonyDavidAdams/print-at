@@ -85,9 +85,13 @@
   .lg.big img{height:50px}.lg.mid img{height:42px}.lg.hotel img{height:46px}.lg.sticker img{height:66px}
   .lg:hover img{transform:scale(1.05)}
 
-  .shots{display:grid;grid-template-columns:1.1fr 1.1fr .8fr .8fr;gap:18px;margin-top:40px;align-items:start}
-  .shot{background:var(--card);border:3px solid var(--ink);box-shadow:6px 6px 0 rgba(28,58,87,.14);padding:10px}
-  .shot img{display:block;width:100%;height:auto;border:1px solid rgba(28,58,87,.25)}
+  .shots{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:40px;align-items:stretch}
+  .shot{background:var(--card);border:3px solid var(--ink);box-shadow:6px 6px 0 rgba(28,58,87,.14);padding:12px;display:flex;flex-direction:column}
+  .shot .pic{display:block;width:100%;aspect-ratio:4/3.4;background:#fff;border:1px solid rgba(28,58,87,.25);overflow:hidden;cursor:zoom-in;position:relative}
+  .shot .pic img{display:block;width:100%;height:100%;object-fit:contain;object-position:center;background:#fff}
+  .shot .pic:after{content:"Click to enlarge";position:absolute;right:8px;bottom:8px;font-family:"Oswald";font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--ink);color:var(--paper);padding:3px 7px;opacity:.85}
+  .lightbox{position:fixed;inset:0;background:rgba(13,34,54,.92);display:none;align-items:center;justify-content:center;z-index:1000;cursor:zoom-out;padding:24px}
+  .lightbox.on{display:flex}.lightbox img{max-width:min(1100px,96vw);max-height:92vh;border:4px solid var(--paper);background:#fff}
   .shot .n{font-family:"Anton";font-size:30px;color:var(--red);line-height:1;margin:8px 0 2px}
   .shot h3{font-family:"Oswald";font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin:2px 0 4px;font-size:16px}
   .shot p{margin:0;color:var(--ink2);font-size:14px;line-height:1.45}
@@ -126,6 +130,10 @@
   .accel b{font-weight:700}
   .accel a{background:#fff;color:var(--red);font-weight:700;padding:6px 14px;border:2px solid #fff;white-space:nowrap}
   .accel a:hover{background:transparent;color:#fff}
+  .guides{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-top:28px}
+  .guides .guide{display:block;padding:12px 14px;background:var(--card);border:2px solid var(--ink);box-shadow:4px 4px 0 rgba(28,58,87,.14);font-family:"Oswald";font-weight:600;font-size:15px;letter-spacing:.3px;color:var(--ink);text-decoration:none}
+  .guides .guide:hover{background:var(--ink);color:var(--paper)}
+  @media(max-width:820px){.guides{grid-template-columns:1fr}}
   .accelband{background:var(--ink);color:var(--paper);border-top:3px solid var(--gold)}
   .accelband .wrap{padding:44px 24px;text-align:center}
   .accelband h2{color:var(--paper)}.accelband .g{color:var(--gold)}
@@ -138,7 +146,7 @@
 
   @media(max-width:820px){
     .steps,.feats{grid-template-columns:1fr}
-    .shots{grid-template-columns:1fr 1fr}
+    .shots{grid-template-columns:1fr}
     .stats{grid-template-columns:repeat(2,1fr)}
     .split{grid-template-columns:1fr}.split.rev{direction:ltr}
     .frame{transform:none}.frame.r{transform:none}
@@ -158,6 +166,7 @@
     <a href="#board">The Board</a>
     <a href="#network">Network</a>
     <a href="#agents">Agents</a>
+    <a href="#guides">Guides</a>
     <a href="https://printat.co/help">Help</a>
     <a class="btn" href="https://github.com/AnthonyDavidAdams/print-at">GitHub &#9733;</a>
     <a class="btn red" href="https://printat.co/app">Print from the web</a>
@@ -199,10 +208,10 @@
   <h2>Hit Print.<br><span class="red">That's the whole app.</span></h2>
   <p class="lead">Real screenshots from a Mac, printing a boarding pass. No new window to learn until the shop is picked.</p>
   <div class="shots">
-    <div class="shot"><img src="assets/shots/1-print-dialog.png" alt="macOS Print dialog with Print@ Nearby selected as the printer"><div class="n">01</div><h3>Pick Print@ Nearby</h3><p>It sits in the printer menu of every app, next to the printer on your desk. Shops you've used become printers too.</p></div>
-    <div class="shot"><img src="assets/shots/2-options.png" alt="Print@ Dispatch options: optimize for, search radius, shop type, needed by, finishing, paper stock, how to send, confirm location"><div class="n">02</div><h3>Say what matters</h3><p>Closest, cheapest, open now. Chains only or anything that prints. Stapled, cardstock, needed by tomorrow. Save it as a preset.</p></div>
-    <div class="shot"><img src="assets/shots/3-searching.png" alt="Print@ status window checking hours, prices and how to order at ten places"><div class="n">03</div><h3>It does the calls</h3><p>Reads each shop's site, checks today's hours and prices, finds how they take files. You watch it work.</p></div>
-    <div class="shot"><img src="assets/shots/4-ranked.png" alt="Print@ status window showing best matches ranked with distance, hours, price and how the job is sent"><div class="n">04</div><h3>Pick, or let it</h3><p>A ranked shortlist with the reason for each. One click sends the PDF; the pickup code comes back to you.</p></div>
+    <div class="shot"><a class="pic" href="assets/shots/1-print-dialog.png" data-lightbox><img src="assets/shots/1-print-dialog.png" alt="macOS Print dialog with Print@ Nearby selected as the printer" loading="lazy"></a><div class="n">01</div><h3>Pick Print@ Nearby</h3><p>It sits in the printer menu of every app, next to the printer on your desk. Shops you've used become printers too.</p></div>
+    <div class="shot"><a class="pic" href="assets/shots/2-options.png" data-lightbox><img src="assets/shots/2-options.png" alt="Print@ Dispatch options: optimize for, search radius, shop type, needed by, finishing, paper stock, how to send, confirm location" loading="lazy"></a><div class="n">02</div><h3>Say what matters</h3><p>Closest, cheapest, open now. Chains only or anything that prints. Stapled, cardstock, needed by tomorrow. Save it as a preset.</p></div>
+    <div class="shot"><a class="pic" href="assets/shots/3-searching.png" data-lightbox><img src="assets/shots/3-searching.png" alt="Print@ status window checking hours, prices and how to order at ten places" loading="lazy"></a><div class="n">03</div><h3>It does the calls</h3><p>Reads each shop's site, checks today's hours and prices, finds how they take files. You watch it work.</p></div>
+    <div class="shot"><a class="pic" href="assets/shots/4-ranked.png" data-lightbox><img src="assets/shots/4-ranked.png" alt="Print@ status window showing best matches ranked with distance, hours, price and how the job is sent" loading="lazy"></a><div class="n">04</div><h3>Pick, or let it</h3><p>A ranked shortlist with the reason for each. One click sends the PDF; the pickup code comes back to you.</p></div>
   </div>
 </div></section>
 
@@ -325,6 +334,30 @@
   <div class="cta" style="margin-top:22px"><a class="btn red" href="https://github.com/AnthonyDavidAdams/print-at/tree/main/mcp">Get the MCP server</a></div>
 </div></section>
 
+<section id="guides"><div class="wrap">
+  <div class="lab">Guides</div>
+  <h2>Where to print, anywhere.<br><span class="red">Answers first, Print@ second.</span></h2>
+  <p class="lead">Short, practical guides for the moments people search for a printer: hotels, libraries, airports, abroad, from a phone, in the next hour.</p>
+  <div class="guides">
+    <a class="guide" href="https://printat.co/guides/printers-near-me">Printers near me: every way to get something printed today</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-at-a-hotel">How to print at a hotel (even if you are not a guest)</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-at-a-library">How to print at a public library</a>
+    <a class="guide" href="https://printat.co/guides/digital-nomad-guide-to-printing">The digital nomad guide to printing anywhere</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-a-boarding-pass">How to print a boarding pass without a printer</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-from-iphone-without-a-printer">How to print from an iPhone or Android with no printer</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-without-a-printer">How to print without a printer: every option</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-a-shipping-label-without-a-printer">How to print a shipping label without a printer</a>
+    <a class="guide" href="https://printat.co/guides/how-to-email-a-document-to-a-print-shop">How to email a document to a print shop</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-while-traveling-abroad">How to print documents while traveling abroad</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-at-an-airport">How to print at an airport</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-a-pdf-near-me">How to print a PDF near me</a>
+    <a class="guide" href="https://printat.co/guides/how-to-let-an-ai-agent-print">How to let an AI agent print in the real world</a>
+    <a class="guide" href="https://printat.co/guides/where-to-print-library-vs-shop-vs-hotel">Library, print shop or hotel: where should you print?</a>
+    <a class="guide" href="https://printat.co/guides/last-minute-printing-guide">Last-minute printing: paper in the next hour</a>
+    <a class="guide" href="https://printat.co/guides/how-to-print-from-a-mac-to-a-print-shop">How to print from a Mac straight to a print shop</a>
+  </div>
+</div></section>
+
 <section class="accelband"><div class="wrap">
   <div class="lab" style="color:var(--gold)">Built by a builder</div>
   <h2>Print@ was built in a week.<br><span class="g">You could build the next one.</span></h2>
@@ -332,6 +365,8 @@
   <a class="btn red" href="https://earthpilot.ai/accelerator">Join the 90-Day AI Accelerator</a>
 </div></section>
 
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('on')"><img alt=""></div>
+<script>document.querySelectorAll('[data-lightbox]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();var lb=document.getElementById('lightbox');lb.querySelector('img').src=a.getAttribute('href');lb.classList.add('on');});});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('lightbox').classList.remove('on');});</script>
 <footer><div class="wrap">
   PRINT<span class="red">@</span>&#8482; &middot; Open-source beta, use at your own risk &middot; <a href="https://printat.co/help">Help &amp; bug reports</a> &middot; <a href="https://printat.co/terms">Terms</a> &middot; <a href="https://printat.co/privacy">Privacy</a> &middot; Built with Claude Code &middot; <a href="https://github.com/AnthonyDavidAdams/print-at">github.com/AnthonyDavidAdams/print-at</a> &middot; MIT
 </div></footer>
@@ -358,5 +393,6 @@
   t.innerHTML = brands.join('') + brands.join('');
   t.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault()})});
 </script>
+<script src="https://printat.co/chat.js" defer></script>
 </body>
 </html>

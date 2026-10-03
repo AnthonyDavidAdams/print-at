@@ -10,6 +10,9 @@ const mail = require('./mail');
 const shopResearch = require('./research');
 const FAQ = require('./faq');
 const legal = require('./legal');
+const guides = require('./guides');
+const faqList = require('./faq');
+const CHAT_JS = fs.readFileSync(path.join(__dirname, 'chat.js'), 'utf8');
 const cover = require('./cover');
 const qr = require('./qr');
 
@@ -63,7 +66,11 @@ a{color:var(--red)}.muted{color:var(--ink2);font-size:14px}.stars{color:var(--go
 .head{display:flex;justify-content:space-between;align-items:baseline}
 h1:after{content:"™";font-family:"Bitter",serif;font-size:.36em;vertical-align:top;position:relative;top:.5em;margin-left:2px;color:var(--ink2)}
 </style><link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@600;700&family=Bitter:wght@400;600&display=swap" rel="stylesheet">`;
-const page = (title, inner) => `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${CSS}<div class=wrap>${inner}</div>`;
+// Every page ships Open Graph + Twitter cards (shared links render from them) and the help chat.
+const DEFAULT_DESC = 'Print@ turns any print shop, hotel or library printer near you into a printer in your Print dialog. Open source, macOS, free beta.';
+const og = (title, o = {}) => { const u = BASE + (o.path || ''); const d = o.description || DEFAULT_DESC; const img = o.image || BASE + '/assets/og.png';
+  return `<meta name=description content="${esc(d)}"><link rel=canonical href="${esc(u)}"><meta property=og:title content="${esc(title)}"><meta property=og:description content="${esc(d)}"><meta property=og:image content="${esc(img)}"><meta property=og:url content="${esc(u)}"><meta property=og:type content="${o.type || 'website'}"><meta property=og:site_name content="Print@™"><meta name=twitter:card content=summary_large_image><meta name=twitter:title content="${esc(title)}"><meta name=twitter:description content="${esc(d)}"><meta name=twitter:image content="${esc(img)}">`; };
+const page = (title, inner, o = {}) => `<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${og(title, o)}${CSS}</head><body><div class=wrap>${inner}</div>${o.extra || ''}<script src="/chat.js" defer></script></body></html>`;
 
 // printat.co is the product's front door: the landing page (shared with the GitHub Pages
 // site in docs/), its assets, and the one-line installer. The customer portal lives at /app.
@@ -235,6 +242,73 @@ function notifyShop(shop, jobs, customerName) {
   mail(shop.email, `New print job (${jobs.length} file${jobs.length > 1 ? 's' : ''}) — pickup ${jobs[0].pickup_code}`,
     `${customerName || 'A customer'} sent ${jobs.length} file${jobs.length > 1 ? 's' : ''} to ${shop.name}:\n${jobListing(jobs)}\n\nOpen your queue to print: ${BASE}/shop/dashboard\n\nPickup code: ${jobs[0].pickup_code}\n\nReply to this email to message the customer.`,
     replyAddr('order', jobs[0].pickup_code));
+}
+
+// ---- GUIDES (SEO / answer pages) ----
+const GUIDE_CSS = `<style>.guide{max-width:720px}.guide h1{font-family:"Anton";font-size:34px;line-height:1.15;text-transform:none;letter-spacing:0;margin:10px 0 4px}.guide h1:after{content:none}.guide .meta{color:#5c6f80;font-size:13px;margin:0 0 18px}.guide p,.guide li{font-size:17px;line-height:1.6}.guide ul,.guide ol{padding-left:22px}.guide h2{margin-top:30px}.guide .cta{background:#f5ecd7;border:3px solid #1c3a57;box-shadow:6px 6px 0 rgba(28,58,87,.14);padding:18px 20px;margin:30px 0}.guide .cta p{margin:0 0 12px}.guide .cta a.btn{display:inline-block;width:auto;margin:0 8px 8px 0;padding:10px 16px}.guide dl dt{font-weight:700;margin-top:14px}.guide dl dd{margin:4px 0 0}.related a,.allguides a{display:block;padding:8px 0;border-top:1px solid rgba(28,58,87,.2);color:#1c3a57;font-weight:600;text-decoration:none}.related a:hover,.allguides a:hover{color:#c8432c}</style>`;
+const guideCta = () => `<div class=cta><p><b>Print@</b> does this from the Print dialog on a Mac: pick <b>Print@ Nearby</b>, and it finds the closest shop or public printer, sends the file, and gives you a pickup code. From a phone, send a file to a Print@ Network shop.</p><a class="btn red" href="/#install">Install on macOS</a><a class=btn href="/app">Print from the web</a><a class=btn href="/guides">All guides</a></div>`;
+function guidePage(g) {
+  const url = `${BASE}/guides/${g.slug}`;
+  const ld = [
+    { '@context': 'https://schema.org', '@type': 'Article', headline: g.title, description: g.description, datePublished: guides.UPDATED, dateModified: guides.UPDATED, author: { '@type': 'Organization', name: 'Print@', url: BASE }, publisher: { '@type': 'Organization', name: 'Print@', logo: { '@type': 'ImageObject', url: BASE + '/assets/og.png' } }, mainEntityOfPage: url, image: BASE + '/assets/og.png' },
+    { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: g.faq.map(f => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) },
+    { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Print@', item: BASE }, { '@type': 'ListItem', position: 2, name: 'Guides', item: BASE + '/guides' }, { '@type': 'ListItem', position: 3, name: g.title, item: url }] },
+  ];
+  const related = (g.related || []).map(guides.find).filter(Boolean);
+  const inner = `${GUIDE_CSS}<div class=head><h1><a href="/" style="color:inherit;text-decoration:none">PRINT<span class=at>@</span></a></h1><span class=tag><a href="/guides">Guides</a></span></div>
+<article class=guide><h1>${esc(g.title)}</h1><p class=meta>Print@ guides · updated ${guides.UPDATED}</p>${guides.bodyHtml(g.body)}${guideCta()}
+<h2>Questions people ask</h2><dl>${g.faq.map(f => `<dt>${esc(f.q)}</dt><dd>${esc(f.a)}</dd>`).join('')}</dl>
+${related.length ? `<h2>Related guides</h2><div class=related>${related.map(r => `<a href="/guides/${r.slug}">${esc(r.title)}</a>`).join('')}</div>` : ''}
+<h2>All guides</h2><div class=allguides>${guides.byTitle().map(r => `<a href="/guides/${r.slug}">${esc(r.title)}</a>`).join('')}</div></article>
+<script type="application/ld+json">${scriptJSON(ld)}</script>`;
+  return page(g.title, inner, { description: g.description, path: '/guides/' + g.slug, type: 'article' });
+}
+function guidesIndex() {
+  const inner = `${GUIDE_CSS}<div class=head><h1><a href="/" style="color:inherit;text-decoration:none">PRINT<span class=at>@</span></a></h1><span class=tag>Guides</span></div>
+<article class=guide><h1>Where to print, anywhere</h1><p class=meta>Short, practical answers for the moments people go looking for a printer.</p>
+<div class=allguides>${guides.byTitle().map(r => `<a href="/guides/${r.slug}">${esc(r.title)}<br><span style="font-weight:400;color:#5c6f80;font-size:14px">${esc(r.description)}</span></a>`).join('')}</div>${guideCta()}</article>`;
+  return page('Print@ guides: where to print, anywhere', inner, { description: 'Guides to printing without a printer: hotels, libraries, airports, abroad, from a phone, in the next hour.', path: '/guides' });
+}
+const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${['/', '/app', '/shop', '/help', '/guides', '/terms', '/privacy', ...guides.GUIDES.map(g => '/guides/' + g.slug)].map(u => `  <url><loc>${BASE}${u}</loc><lastmod>${guides.UPDATED}</lastmod></url>`).join('\n')}\n</urlset>\n`;
+
+// ---- HELP CHAT ----
+const CHAT_MODEL = process.env.PRINTAT_CHAT_MODEL || 'anthropic/claude-haiku-4.5';
+const CHAT_SYSTEM = () => `You are the Print@ helper, a support chat on printat.co. Be brief, concrete and friendly; plain sentences, no bullet spam, no em dashes. Under 120 words unless steps are needed.
+
+What Print@ is: an open-source macOS virtual printer. After install, "Print@ Nearby" appears in every app's Print dialog; choosing it finds where you are, ranks nearby public printers (hotel and library printers, kiosks, chains, independent shops), and sends the document the way that place accepts it (email, upload page, or a Print@ Network shop), then shows a receipt with the address and a pickup code. Files are deleted from Print@ as soon as the job is delivered. It is a free open-source beta, use at your own risk; terms at ${BASE}/terms.
+Install: in Terminal, curl -fsSL https://printat.co/install.sh | bash (needs the Xcode Command Line Tools and Node.js 22+), or download the .pkg at ${BASE}/download/PrintAt.pkg (unsigned beta: allow it under System Settings > Privacy & Security > Open Anyway). Then run: printat connect you@email, and click the link in the email.
+Update: the console at http://127.0.0.1:4243/ shows an Update now button when a new version exists; "printat update" in Terminal does the same. Console: settings, pinned shops, research keys, job history, bug reports. Status: printat status. Uninstall: ~/printat/uninstall.sh.
+Research brain: with Claude Code installed it checks hours, prices and how each shop takes files; otherwise add an Anthropic or OpenAI key in the console; without any, it still sends to chains, hotels, libraries and kiosks by their known addresses.
+Phones and Windows: no driver yet. Phones can send a file to a Print@ Network shop at ${BASE}/app. Shops join free at ${BASE}/shop. Guides for where to print: ${BASE}/guides. AI agents: the MCP server in the GitHub repo (github.com/AnthonyDavidAdams/print-at).
+Rules: never invent a shop's prices or hours; say they vary and the receipt shows what Print@ found. For bugs, ask for the exact error text or the last lines of ~/Library/Logs/PrintAt/agent.log, give the matching known fix if there is one, and otherwise point to the report form at ${BASE}/help#bug (a person replies by email). You cannot take actions, send jobs or look up accounts. If you do not know, say so.
+
+Known fixes (use these verbatim when they match):
+${faqList.map(f => `- ${f.title}: ${f.answer}`).join('\n')}`;
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Max-Age': '86400' };
+async function helpChat(messages) {
+  const msgs = (Array.isArray(messages) ? messages : []).filter(m => m && typeof m.content === 'string' && m.content.trim()).slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content.slice(0, 2000) }));
+  const users = msgs.filter(m => m.role === 'user'); if (!users.length) throw new Error('say something first');
+  if (users.length === 1) { try { const t = await triage(users[0].content); if (t.faq && t.confidence >= 0.8) return { answer: `${t.faq.title}\n\n${t.faq.answer}`, source: 'faq' }; } catch {} }
+  const key = process.env.OPENROUTER_API_KEY;
+  try {
+    if (!key) throw new Error('chat is not configured');
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', 'HTTP-Referer': BASE, 'X-Title': 'Print@ help' },
+      body: JSON.stringify({ model: CHAT_MODEL, messages: [{ role: 'system', content: CHAT_SYSTEM() }, ...msgs], max_tokens: 450, temperature: 0.3 }), signal: AbortSignal.timeout(40000) });
+    const j = await r.json(); if (!r.ok || !j.choices) throw new Error(`model ${r.status}: ${JSON.stringify(j).slice(0, 120)}`);
+    return { answer: String(j.choices[0].message.content || '').trim(), source: 'model' };
+  } catch (e) {
+    console.error('help chat:', e.message);
+    // No model: match the question against the known fixes by words, so the chat still helps.
+    const f = localFaq(users[users.length - 1].content);
+    if (f) return { answer: `${f.title}\n\n${f.answer}\n\n(My full brain is offline right now, so this is the closest known fix. If it is not it, send a report at ${BASE}/help#bug and a person replies by email.)`, source: 'faq-local' };
+    return { answer: `My full brain is offline for the moment. The known fixes are listed at ${BASE}/help, where you can also send a report and a person replies by email. Where to print: ${BASE}/guides.`, source: 'offline' };
+  }
+}
+function localFaq(q) {
+  const words = new Set(String(q).toLowerCase().match(/[a-z0-9@.'-]{3,}/g) || []); if (!words.size) return null;
+  let best = null, bestScore = 0;
+  for (const f of faqList) { const hay = `${f.title} ${f.match || ''}`.toLowerCase(); let score = 0; for (const w of words) if (hay.includes(w)) score++; if (score > bestScore) { bestScore = score; best = f; } }
+  return bestScore >= 2 ? best : null;
 }
 
 // ---- WEEKLY REPORT ----
@@ -489,6 +563,22 @@ const server = http.createServer(async (req, res) => {
 
     // ---- SUPPORT ----
     if (req.method === 'GET' && url === '/help') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(helpPage()); }
+    if (req.method === 'GET' && url === '/chat.js') { res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' }); return res.end(CHAT_JS); }
+    if (req.method === 'GET' && url === '/robots.txt') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /shop/dashboard\nSitemap: ${BASE}/sitemap.xml\n`); }
+    if (req.method === 'GET' && url === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml' }); return res.end(sitemap()); }
+    if (req.method === 'GET' && url === '/guides') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(guidesIndex()); }
+    if (req.method === 'GET' && url.startsWith('/guides/')) {
+      const g = guides.find(url.slice(8).replace(/\/$/, '')); if (!g) return res.writeHead(404, { 'Content-Type': 'text/html' }), res.end(page('Not found', `<div class=head><h1>PRINT<span class=at>@</span></h1></div><div class=card><p>No guide at that address. <a href="/guides">All guides</a>.</p></div>`));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }); return res.end(guidePage(g));
+    }
+    if (req.method === 'OPTIONS' && url === '/api/help/chat') { res.writeHead(204, CORS); return res.end(); }
+    if (req.method === 'POST' && url === '/api/help/chat') {
+      const out = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json', ...CORS }); res.end(JSON.stringify(o)); };
+      if (limited('chat:' + clientIp(req), 40, 3600e3)) return out(429, { error: 'too many messages this hour' });
+      let b; try { b = JSON.parse((await body(req)).toString() || '{}'); } catch { return out(400, { error: 'bad json' }); }
+      try { const r = await helpChat(b.messages); db.event('chat', r.source); return out(200, r); }
+      catch (e) { console.error('help chat:', e.message); return out(200, { answer: `I could not take that message (${e.message}). Known fixes and the report form are at ${BASE}/help.`, error: e.message }); }
+    }
     if (req.method === 'POST' && url === '/api/help/ask') {
       if (limited('ask:' + clientIp(req), 30, 3600e3)) return json(res, 429, { error: 'slow down' });
       const b = JSON.parse((await body(req)).toString() || '{}');
@@ -847,4 +937,4 @@ const server = http.createServer(async (req, res) => {
 });
 server.listen(PORT, () => console.log(`Print@ Network on :${PORT}`));
 // Rendered pages for tests (test/regress/page-scripts-parse.js checks every inline script parses).
-module.exports = { pages: () => ({ landing: LANDING, customer: customerPage(null), help: helpPage(), terms: page('Terms', legal.TERMS), privacy: page('Privacy', legal.PRIVACY) }) };
+module.exports = { pages: () => ({ landing: LANDING, customer: customerPage(null), help: helpPage(), terms: page('Terms', legal.TERMS), privacy: page('Privacy', legal.PRIVACY), guides: guidesIndex(), guide: guidePage(guides.GUIDES[0]), chatjs: '<script>' + CHAT_JS + '</script>' }) };
