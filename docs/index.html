@@ -47,6 +47,10 @@
   .brand .tm{font-family:"Bitter",serif;font-size:11px;vertical-align:top;margin-left:2px;color:var(--ink2)}
   .navlinks{display:flex;gap:26px;align-items:center;font-family:"Oswald";font-weight:600;text-transform:uppercase;font-size:14px;letter-spacing:1px}
   .navlinks a:hover{color:var(--red)}
+  .navlinks .short,.menu-btn,.mobmenu{display:none}
+  .mobmenu{background:var(--card);border-bottom:3px solid var(--ink)}
+  .mobmenu a{display:block;padding:13px 24px;border-top:1px solid rgba(28,58,87,.2);font-family:"Oswald";font-weight:600;text-transform:uppercase;letter-spacing:1px;font-size:15px}
+  .mobmenu a:hover{background:var(--ink);color:var(--paper)}
   .btn{font-family:"Oswald";font-weight:700;text-transform:uppercase;letter-spacing:1.2px;font-size:14px;
     display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border:2.5px solid var(--ink);cursor:pointer;transition:.15s;
     box-shadow:4px 4px 0 var(--ink);background:var(--paper);color:var(--ink)}
@@ -151,6 +155,14 @@
     .split{grid-template-columns:1fr}.split.rev{direction:ltr}
     .frame{transform:none}.frame.r{transform:none}
     .navlinks a:not(.btn){display:none}
+    .navlinks{gap:10px}
+    .navlinks .btn{padding:9px 12px;font-size:13px;box-shadow:3px 3px 0 var(--ink)}
+    .navlinks a.btn:not(.red){display:none}
+    .navlinks .long{display:none}.navlinks .short{display:inline}
+    .menu-btn{display:inline-flex}
+    .mobmenu.open{display:block}
+    .accel .wrap{flex-wrap:wrap;gap:6px 12px;font-size:13px;padding-top:10px;padding-bottom:10px}
+    header .cta{flex-direction:column;align-items:stretch}
   }
 </style>
 </head>
@@ -169,8 +181,12 @@
     <a href="#guides">Guides</a>
     <a href="https://printat.co/help">Help</a>
     <a class="btn" href="https://github.com/AnthonyDavidAdams/print-at">GitHub &#9733;</a>
-    <a class="btn red" href="https://printat.co/app">Print from the web</a>
+    <a class="btn red" href="https://printat.co/app"><span class="long">Print from the web</span><span class="short">Print@ Web</span></a>
+    <button class="btn menu-btn" type="button" aria-expanded="false" aria-controls="mobmenu" onclick="var m=document.getElementById('mobmenu');var o=m.classList.toggle('open');this.setAttribute('aria-expanded',o);this.textContent=o?'Close':'Menu'">Menu</button>
   </div>
+</div>
+<div class="mobmenu" id="mobmenu">
+  <a href="#how">How</a><a href="#hitprint">See it</a><a href="#install">Install</a><a href="#reach">Reach</a><a href="#board">The Board</a><a href="#network">Network</a><a href="#agents">Agents</a><a href="#guides">Guides</a><a href="https://printat.co/help">Help</a><a href="https://printat.co/app">Print from the web</a><a href="https://github.com/AnthonyDavidAdams/print-at">GitHub</a>
 </div></nav>
 
 <div class="accel"><div class="wrap">
@@ -393,6 +409,7 @@
   t.innerHTML = brands.join('') + brands.join('');
   t.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault()})});
 </script>
+<script>document.querySelectorAll("#mobmenu a").forEach(function(a){a.addEventListener("click",function(){document.getElementById("mobmenu").classList.remove("open");var b=document.querySelector(".menu-btn");if(b){b.textContent="Menu";b.setAttribute("aria-expanded","false");}});});</script>
 <script src="https://printat.co/chat.js" defer></script>
 </body>
 </html>

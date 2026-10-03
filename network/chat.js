@@ -24,10 +24,11 @@
 .pa-chat form button{font:700 13px Oswald,-apple-system,system-ui,sans-serif;letter-spacing:1px;text-transform:uppercase;background:#c8432c;color:#fff;border:2px solid #1c3a57;padding:0 14px;cursor:pointer}\
 .pa-chat .f{font-size:12px;color:#5c6f80;padding:6px 14px 10px;background:#efe4cc}\
 .pa-chat .f a{color:#c8432c}\
+@media(max-width:600px){.pa-chat-btn{right:12px;bottom:12px;padding:10px 12px}.pa-chat-btn span{display:none}.pa-chat{right:0;bottom:0;width:100vw;height:100vh;height:100dvh;border-width:0;box-shadow:none}}\
 @media print{.pa-chat,.pa-chat-btn{display:none!important}}';
   var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
-  var btn = document.createElement('button'); btn.className = 'pa-chat-btn'; btn.type = 'button'; btn.innerHTML = '<b>?</b> Help';
+  var btn = document.createElement('button'); btn.className = 'pa-chat-btn'; btn.type = 'button'; btn.innerHTML = '<b>?</b><span>Help</span>';
   var box = document.createElement('div'); box.className = 'pa-chat'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Print@ help chat');
   box.innerHTML = '<div class=h><span>PRINT<i>@</i> HELP</span><button type=button aria-label=Close>&times;</button></div><div class=m></div><div class=t></div>' +
     '<form><textarea placeholder="Ask anything: where to print, what went wrong, how it works…" aria-label="Your message"></textarea><button type=submit>Send</button></form>' +
