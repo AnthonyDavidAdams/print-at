@@ -6,6 +6,8 @@ import PostalMime from 'postal-mime';
 
 export default {
   async email(message, env) {
+    // DMARC aggregate reports (Google, Microsoft, Yahoo send one a day) go to dmarc@: accept and drop.
+    if (/^dmarc@/i.test(message.to || '')) return;
     if (message.rawSize > 15 * 1024 * 1024) { if (env.FALLBACK_TO) await message.forward(env.FALLBACK_TO); return; }
     let parsed;
     try { parsed = await PostalMime.parse(message.raw); } catch (e) { parsed = null; }
