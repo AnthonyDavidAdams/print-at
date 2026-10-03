@@ -9,6 +9,18 @@ const MESSAGE = process.env.PRINTAT_COVER_MESSAGE ||
   'Print@ is free during the open beta. Have a printer? Any business can take jobs like this one from a web page, no software: printat.co/shop';
 const INK = rgb(0.11, 0.14, 0.19), MUTED = rgb(0.42, 0.46, 0.52), RED = rgb(0.86, 0.2, 0.18), LINE = rgb(0.85, 0.87, 0.9);
 
+// The Sent row is a plain date the counter can read at a glance ("Sep 30, 2026"), in the
+// customer's timezone (an IANA name the driver sends), not the server's UTC clock: an
+// evening job in the US used to read as the next day in GMT. No zone, or one we can't
+// parse, falls back to COVER_TZ.
+const COVER_TZ = process.env.PRINTAT_COVER_TZ || 'America/Los_Angeles';
+function sentDate(tz, at = new Date()) {
+  for (const timeZone of [tz, COVER_TZ, 'UTC']) {
+    if (!timeZone) continue;
+    try { return at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: String(timeZone) }); } catch { /* unknown zone: try the next */ }
+  }
+}
+
 function wrap(font, text, size, width) {
   const out = []; for (const para of String(text || '').split('\n')) {
     let line = '';
@@ -21,7 +33,7 @@ function wrap(font, text, size, width) {
   return out;
 }
 
-// fields: { name, email, code, ref, shop, filename, pages, copies, color, duplex, when, message }
+// fields: { name, email, code, ref, shop, filename, pages, copies, color, duplex, when, tz, message }
 async function drawCover(doc, f) {
   const page = doc.addPage([612, 792]);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold), reg = await doc.embedFont(StandardFonts.Helvetica);
@@ -47,7 +59,7 @@ async function drawCover(doc, f) {
     ['Copies', String(f.copies || 1)],
     ['Print', [f.color ? 'Color' : 'Black and white', f.duplex ? 'two-sided' : 'single-sided'].join(', ')],
     ['Sent to', f.shop || ''],
-    ['Sent', f.when || new Date().toUTCString()],
+    ['Sent', f.when || sentDate(f.tz)],
     ['Ref', f.ref || ''],
   ].filter(r => r[1]);
   for (const [k, v] of rows) { y -= 20; text(k, L, y, 11, bold); const lines = wrap(reg, v, 11, W - 90); lines.forEach((ln, i) => { if (i) y -= 15; text(ln, L + 90, y, 11); }); }
@@ -82,4 +94,4 @@ async function withCover(buf, f) {
   return { buffer: Buffer.from(await out.save()), pages, merged: true };
 }
 
-module.exports = { coverPdf, withCover, MESSAGE };
+module.exports = { coverPdf, withCover, sentDate, MESSAGE };
