@@ -22,6 +22,7 @@ const STATE_PATH = path.join(__dirname, 'state.json');
 const RUNS = path.join(__dirname, 'runs');
 const WORKTREES = path.join(path.dirname(ROOT), 'printat-fixes');
 const JEV_MIN = Number(process.env.DEVAGENT_JEV_MIN || 0.6);
+const AUTO = process.env.DEVAGENT_AUTO_APPROVE === '1'; // deploy without waiting for a YES; the text becomes an FYI
 
 for (const line of (() => { try { return fs.readFileSync(path.join(os.homedir(), '.printat.env'), 'utf8').split('\n'); } catch { return []; } })()) {
   const m = line.match(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=(.*)$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
@@ -140,10 +141,16 @@ async function judgeAndAsk(id, t, md, diff, tests) {
   const ok = s.testsPassed && astra.approve && claude.approve && jev.probability >= JEV_MIN;
   const verdictLine = `Tests: ${s.testsPassed ? 'pass' : 'FAIL'} · Astra: ${astra.approve ? 'ok' : 'NO'} (${astra.risk}) · Claude: ${claude.approve ? 'ok' : 'NO'} (${claude.risk}) · Jev ${jev.probability.toFixed(2)}`;
   log(id, verdictLine + (astra.cost ? ` · astra $${astra.cost.toFixed(2)}` : ''));
-  if (ok) {
+  s.verdictLine = verdictLine; s.summary = `Cause: ${fix.cause}\nFix: ${fix.change} (${s.files.length} file${s.files.length === 1 ? '' : 's'}, deploy: ${fix.deploy})`;
+  if (ok && AUTO) {
+    s.stage = 'awaiting-approval'; s.textedAt = Date.now(); save();
+    await note(id, 'fix-ready', `branch ${s.branch}; ${verdictLine}; auto-approved`);
+    log(id, 'auto-approve on: deploying');
+    await deploy(id);
+  } else if (ok) {
     s.stage = 'awaiting-approval'; s.textedAt = Date.now(); save();
     await note(id, 'fix-ready', `branch ${s.branch}; ${verdictLine}; awaiting maintainer approval`);
-    notify.sendText(`Print@ dev agent · ticket #${id} (${t.email || 'no email'}): fix ready.\nCause: ${fix.cause}\nFix: ${fix.change} (${s.files.length} file${s.files.length === 1 ? '' : 's'}, deploy: ${fix.deploy})\n${verdictLine}\nReply YES ${id} to deploy, NO ${id} to drop.`);
+    notify.sendText(`Print@ dev agent · ticket #${id} (${t.email || 'no email'}): fix ready.\n${s.summary}\n${verdictLine}\nReply YES ${id} to deploy, NO ${id} to drop.`);
   } else {
     s.stage = 'needs-human'; save();
     const why = [...(astra.must_fix || []).map(x => 'Astra: ' + x), ...(claude.must_fix || []).map(x => 'Claude: ' + x), !s.testsPassed ? 'tests failed' : '', jev.probability < JEV_MIN ? `Jev ${jev.probability.toFixed(2)} < ${JEV_MIN}` : ''].filter(Boolean).slice(0, 5).join('\n');
@@ -169,7 +176,7 @@ async function deploy(id) {
     s.stage = 'deployed'; s.commit = commit; save();
     await note(id, 'fixed', `deployed ${commit} (${deployed})`);
     if (s.email && s.fix.customer_note) { await api(`/api/admin/tickets/${id}/reply`, { method: 'POST', body: JSON.stringify({ text: s.fix.customer_note }) }).then(() => log(id, 'reporter emailed')).catch(e => log(id, 'reply failed: ' + e.message)); }
-    notify.sendText(`Print@ dev agent · ticket #${id} deployed as ${commit} (${deployed}).${s.email ? ' Reporter emailed.' : ''}`);
+    notify.sendText(`Print@ dev agent · ticket #${id} (${s.email || 'no email'}) deployed as ${commit} (${deployed}).${AUTO ? '\n' + (s.summary || '') + '\n' + (s.verdictLine || '') : ''}${s.email ? '\nReporter emailed.' : ''}`);
   } catch (e) { s.stage = 'error'; s.error = e.message; save(); log(id, 'DEPLOY ERROR ' + e.message); notify.sendText(`Print@ dev agent · ticket #${id} deploy FAILED: ${e.message.slice(0, 300)}`); }
 }
 

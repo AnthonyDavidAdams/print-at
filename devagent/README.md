@@ -31,6 +31,9 @@ node devagent/run.js status
 Env, read from `~/.printat.env`: `PRINTAT_ADMIN_SECRET` (the hosted ticket API),
 `OPENROUTER_API_KEY` (Astra + Jev), `DEVAGENT_PHONE` (where approvals go, iMessage).
 Optional: `DEVAGENT_JEV_MIN` (default 0.6), `DEVAGENT_ASTRA_MODEL`.
+`DEVAGENT_AUTO_APPROVE=1` deploys as soon as the three judges pass and texts an FYI instead of a
+question; failures still stop and wait for a human. `devagent/io.printat.devagent.plist` runs `watch`
+this way on the maintainer's Mac (`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.printat.devagent.plist`).
 
 Replies are read from `~/Library/Messages/chat.db`, so the process needs Full Disk Access.
 Worktrees live in `../printat-fixes/<id>`; logs, FIX.md, diff and the three reviews in
