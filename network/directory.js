@@ -32,12 +32,15 @@ function miles(a, b) {
 let allCache = null, allKey = '';
 function all() {
   const po = read('printeron-all'), geo = read('printeron-geo') || {}, pm = read('printme-us');
-  const key = [po && po.fetched, Object.keys(geo).length, pm && pm.fetched].join('|');
+  const key = [po && po.fetched, Object.keys(geo).length, pm && pm.fetched, Math.floor(Date.now() / 3600e3)].join('|'); // re-merge learned coordinates hourly
   if (allCache && allKey === key) return allCache;
+  // Coordinates the drivers learned (pooled facts carry lat/lon for PrinterOn printers they researched)
+  // fill in where the geocoder came up empty.
+  const learned = {}; try { for (const r of require('./db').factsWithEmailLike('%@printspots.com')) if (r.lat && r.lon) learned[r.email.toLowerCase()] = { lat: r.lat, lon: r.lon }; } catch {}
   const out = [];
   for (const p of (po && po.printers) || []) {
     if (!p.email || p.status === 'offline') continue;
-    const g = geo[p.path]; if (!g) continue; // no coordinates yet: not searchable by distance
+    const g = geo[p.path] || learned[p.email.toLowerCase()]; if (!g) continue; // no coordinates yet: not searchable by distance
     const kind = /librar/i.test(p.name) ? 'library' : /hotel|inn|suites|marriott|hilton|hyatt|sheraton|westin|resort|lodge|motel|courtyard|residence|hampton|holiday|doubletree|embassy|fairfield|springhill|towneplace|hospitality/i.test(p.name) ? 'hotel' : 'printer';
     out.push({ key: 'po:' + p.path, network: 'PrinterOn', kind, name: p.name.replace(/\s+-\s+[A-Z0-9]{3,8}$/, ''), address: p.address, city: p.city, state: p.state, country: p.country, email: p.email, color: !!p.color, lat: g.lat, lon: g.lon,
       how: 'Email. The printer emails you a release code; type it at the printer or ask the desk.' });

@@ -135,6 +135,7 @@ module.exports = {
   clearTicketShot(id) { db.prepare("UPDATE tickets SET screenshot='' WHERE id=?").run(id); },
   // shop facts (pooled knowledge)
   factsNear(lat, lon, radiusMi) { const dl = radiusMi / 69, dn = radiusMi / (69 * Math.max(0.2, Math.cos(lat * Math.PI / 180))); return db.prepare('SELECT * FROM shop_facts WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND method IS NOT NULL AND method<>?').all(lat - dl, lat + dl, lon - dn, lon + dn, ''); },
+  factsWithEmailLike(pattern) { return db.prepare('SELECT email, lat, lon FROM shop_facts WHERE email LIKE ?').all(pattern); },
   factsFor(keys) { if (!keys.length) return {}; const rows = db.prepare(`SELECT * FROM shop_facts WHERE key IN (${keys.map(() => '?').join(',')})`).all(...keys); return Object.fromEntries(rows.map(r => [r.key, r])); },
   upsertFact(f) {
     const cur = db.prepare('SELECT * FROM shop_facts WHERE key=?').get(f.key);
