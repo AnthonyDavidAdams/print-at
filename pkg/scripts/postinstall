@@ -8,8 +8,7 @@ if ! xcode-select -p >/dev/null 2>&1; then
   sudo -u "$U" xcode-select --install >/dev/null 2>&1 || true
   say "Print@ needs the Xcode Command Line Tools (a free download from Apple). Install them from the window that just opened, then run this installer again." caution; exit 1
 fi
-NODE="$(sudo -u "$U" -i which node 2>/dev/null || true)"
-if [ -z "$NODE" ]; then sudo -u "$U" open "https://nodejs.org"; say "Print@ needs Node.js 22 or newer (free). Install it from the page that just opened, then run this installer again." caution; exit 1; fi
+# Node.js is fetched by install.sh when the Mac has none.
 {
   if [ -d "$H/printat/.git" ]; then sudo -u "$U" -i git -C "$H/printat" pull --ff-only -q || true
   else sudo -u "$U" -i git clone -q https://github.com/AnthonyDavidAdams/print-at "$H/printat"; fi

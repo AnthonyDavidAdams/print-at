@@ -31,9 +31,8 @@ if ! xcode-select -p >/dev/null 2>&1; then
   die "Re-run this installer once the Command Line Tools finish installing."
 fi
 command -v git >/dev/null 2>&1 || die "git is required (it ships with the Command Line Tools)."
-command -v node >/dev/null 2>&1 || die "Node.js 22+ is required: https://nodejs.org  (or: brew install node)"
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 22 ] || die "Node.js 22+ is required (found $(node --version))."
+if command -v node >/dev/null 2>&1 && [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 22 ] 2>/dev/null; then :
+else say "No Node.js 22+ on this Mac; the installer will fetch a private copy for Print@ (about 50 MB)."; fi
 
 if [ -d "$DEST/.git" ]; then
   say "==> Updating $DEST"

@@ -16,9 +16,9 @@ report_install_problem() {
   echo
   echo "!! Install $kind. The log is at $INSTALL_LOG"
   local ans="y"
-  if [ -r /dev/tty ]; then read -r -p "Send this log to Print@ support so we can fix it (nothing private; versions + this output)? [Y/n] " ans </dev/tty || ans="y"; fi
+  if ( : </dev/tty ) 2>/dev/null; then read -r -p "Send this log to Print@ support so we can fix it (nothing private; versions + this output)? [Y/n] " ans </dev/tty || ans="y"; fi
   case "$ans" in n|N|no|NO) echo "Not sent. You can always run: printat bug \"install $kind\""; return 0 ;; esac
-  local email=""; if [ -r /dev/tty ]; then read -r -p "Your email, so we can reply (optional): " email </dev/tty || email=""; fi
+  local email=""; if ( : </dev/tty ) 2>/dev/null; then read -r -p "Your email, so we can reply (optional): " email </dev/tty || email=""; fi
   python3 - "$INSTALL_LOG" "$kind" "$email" "$PRINTAT_BASE" <<'PY' || echo "(could not send; email print@printat.co with the log)"
 import json,sys,subprocess,urllib.request,platform
 log,kind,email,base=sys.argv[1:5]
@@ -36,7 +36,22 @@ trap 'report_install_problem "failed at line $LINENO"' ERR
 REAL_USER="${SUDO_USER:-$USER}"
 REAL_HOME="$(eval echo "~$REAL_USER")"
 REAL_UID="$(id -u "$REAL_USER")"
-NODE="$(sudo -u "$REAL_USER" -i which node 2>/dev/null || which node)"
+NODE="$(sudo -u "$REAL_USER" -i which node 2>/dev/null || which node 2>/dev/null || true)"
+# Use the private Node that an earlier install fetched, if the Mac still has no Node 22+.
+[ -x "$ROOT/.node/bin/node" ] && { NODE_MAJOR="$("$NODE" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"; [ "$NODE_MAJOR" -ge 22 ] 2>/dev/null || NODE="$ROOT/.node/bin/node"; }
+NODE_MAJOR="$([ -n "$NODE" ] && "$NODE" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+if [ -z "$NODE" ] || [ "$NODE_MAJOR" -lt 22 ] 2>/dev/null; then
+  # No usable Node.js: fetch the official macOS build into ~/printat/.node (no admin rights, nothing
+  # else on the Mac changes). This is the #1 reason installs used to fail.
+  echo "==> Node.js 22+ not found${NODE:+ (have $("$NODE" --version 2>/dev/null))}; fetching a private copy for Print@ (about 50 MB)"
+  NARCH="$(uname -m)"; [ "$NARCH" = "arm64" ] || NARCH="x64"
+  NTAR="$(curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt | grep -o "node-v22[0-9.]*-darwin-$NARCH.tar.gz" | head -1)"
+  [ -n "$NTAR" ] || { echo "!! Could not find a Node.js 22 download for $NARCH. Install Node.js from https://nodejs.org and re-run."; exit 1; }
+  sudo -u "$REAL_USER" bash -c "rm -rf '$ROOT/.node' && mkdir -p '$ROOT/.node' && curl -fsSL 'https://nodejs.org/dist/latest-v22.x/$NTAR' | tar -xz -C '$ROOT/.node' --strip-components=1" \
+    || { echo "!! Node.js download failed. Install Node.js from https://nodejs.org and re-run."; exit 1; }
+  NODE="$ROOT/.node/bin/node"
+  echo "    using $("$NODE" --version) at $NODE"
+fi
 PRINTER="PrintAt"
 
 if [ "$(id -u)" -ne 0 ]; then echo "Run with sudo: sudo $0"; exit 1; fi

@@ -5,7 +5,8 @@
 SELF="${BASH_SOURCE[0]}"
 while [ -L "$SELF" ]; do T="$(readlink "$SELF")"; case "$T" in /*) SELF="$T" ;; *) SELF="$(dirname "$SELF")/$T" ;; esac; done
 DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
-NODE="$(command -v node)"
+NODE="$(command -v node || true)"; [ -x "$DIR/.node/bin/node" ] && { [ -z "$NODE" ] || [ "$("$NODE" -p "process.versions.node.split(\".\")[0]" 2>/dev/null || echo 0)" -lt 22 ] 2>/dev/null; } && NODE="$DIR/.node/bin/node"
+[ -n "$NODE" ] || { echo "Node.js not found. Re-run the installer: curl -fsSL https://printat.co/install.sh | bash"; exit 1; }
 cmd="${1:-help}"; shift || true
 case "$cmd" in
   connect)    exec "$NODE" "$DIR/agent/connect.js" "$@" ;;

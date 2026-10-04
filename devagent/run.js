@@ -204,6 +204,7 @@ async function checkReplies() {
 
 async function once() {
   const open = (await api('/api/admin/tickets?status=open')).tickets || [];
+  log(0, `cycle: ${open.length} open ticket${open.length === 1 ? '' : 's'}${open.length ? ' (#' + open.map(t => t.id).join(', #') + ')' : ''}`);
   for (const t of open) if (!state.tickets[t.id]) await handle(t);
   await checkReplies();
 }

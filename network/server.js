@@ -91,7 +91,7 @@ function customerPage(preShop) {
   <p class=tag>Send a file to a nearby shop. Pick it up with a code.</p>
   <p class=muted style="margin-top:-6px">Your file is deleted from Print@ the moment the shop marks it picked up, and within 7 days no matter what. Unconfirmed uploads are deleted after 2 hours.</p>
   <div class=card><div class=lab>1 · Documents</div>
-    <label>Add PDFs or photos (you can pick several)<input type=file id=file accept="application/pdf,image/*" multiple></label>
+    <label>Add PDFs, photos or documents (you can pick several)<input type=file id=file multiple></label>
     <div id=items></div>
     <label>Your name<input id=cname placeholder="For the pickup"></label>
     <label>Your email (we confirm it, then send your pickup code there)<input id=cemail inputmode=email placeholder="you@example.com" required></label>

@@ -4,6 +4,8 @@
 module.exports = [
   { id: 'install-module-not-found', title: "printat: 'Cannot find module /usr/local/agent/connect.js'", match: 'Running printat connect (or any printat command) fails with Cannot find module /usr/local/agent/... MODULE_NOT_FOUND',
     answer: "That was a bug in the `printat` command when it runs through the /usr/local/bin symlink; it is fixed. Update by re-running the installer, which pulls the fix and reinstalls:\n\n    curl -fsSL https://printat.co/install.sh | bash\n\nThen run `printat connect you@email` again. Until then `~/printat/bin/printat connect you@email` also works." },
+  { id: 'install-node-missing', title: 'Install failed at line 39 / Node.js not found', match: 'The installer stopped with "Install failed at line 39", or complained that Node.js was missing, or the diagnostics show node: ""',
+    answer: "That Mac had no Node.js, which the driver runs on. The installer now fetches a private copy of Node.js 22 into ~/printat/.node by itself (about 50 MB, no admin rights), so just run it again: `curl -fsSL https://printat.co/install.sh | bash`, or open the downloaded PrintAt.pkg again. Nothing else on your Mac changes." },
   { id: 'command-not-found', title: 'printat: command not found', match: 'The shell says printat: command not found after installing',
     answer: "The installer links `printat` into /usr/local/bin, which may not be on your PATH or may not exist. Run it by full path: `~/printat/bin/printat connect you@email`, or re-run the installer: `curl -fsSL https://printat.co/install.sh | bash`." },
   { id: 'xcode-clt', title: 'swiftc not found / Xcode Command Line Tools', match: 'Install fails with swiftc not found, xcrun error, or asks for Xcode Command Line Tools',

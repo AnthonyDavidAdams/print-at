@@ -30,3 +30,6 @@ network/email-worker/.wrangler/
 devagent/state.json
 devagent/runs/
 pkg/build/
+
+# private Node.js fetched by install.sh when the Mac has none
+.node/
