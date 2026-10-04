@@ -73,6 +73,44 @@ async function finishInTerminal(){await fetch('/api/update/terminal',{method:'PO
 </script>`;
 }
 
+// Connect this Mac to the cloud from the console: email → magic link → token, no Terminal.
+const connect = { status: 'idle', email: '', poll: '', error: '', startedAt: 0 };
+async function startConnect(cfg, email) {
+  const cloud = require('./cloud'); const { save } = require('./config');
+  connect.status = 'waiting'; connect.email = email; connect.error = ''; connect.startedAt = Date.now();
+  let poll; try { ({ poll } = await cloud.startDeviceAuth(cfg, email, cfg.contactName)); } catch (e) { connect.status = 'error'; connect.error = `Could not reach ${cfg.cloudBase || 'printat.co'}: ${e.message}`; return; }
+  connect.poll = poll; log(`console: connect link emailed to ${email}`);
+  const deadline = Date.now() + 15 * 60000;
+  (async () => {
+    while (Date.now() < deadline && connect.poll === poll) {
+      await new Promise(r => setTimeout(r, 3000));
+      let d; try { d = await cloud.pollDevice(cfg, poll); } catch { continue; }
+      if (d.status === 'ok' && d.device_token) {
+        save({ cloudToken: d.device_token, cloudEmail: d.email || email, useCloud: 'auto', contactEmail: cfg.contactEmail || d.email || email });
+        Object.assign(cfg, { cloudToken: d.device_token, cloudEmail: d.email || email, useCloud: 'auto', contactEmail: cfg.contactEmail || d.email || email, cloudOn: true });
+        connect.status = 'connected'; log(`console: connected as ${cfg.cloudEmail}`);
+        try { require('./ui').notify('Print@ is connected', `Jobs now dispatch through printat.co as ${cfg.cloudEmail}.`); } catch {}
+        return;
+      }
+    }
+    if (connect.poll === poll && connect.status === 'waiting') { connect.status = 'error'; connect.error = 'The link was not clicked within 15 minutes. Try again.'; }
+  })();
+}
+function connectCard(cfg) {
+  if (cfg.cloudToken) return `<div class=card style="border-color:#3a7d4f;background:#eef7f0"><b>Connected</b> as ${esc(cfg.cloudEmail || '')}. Jobs go out through printat.co with pickup codes and the full printer directory. <form method="post" action="/connect/disconnect" style="display:inline"><button>Disconnect</button></form></div>`;
+  return `<div class=card id=connectcard style="border-color:#c8432c;background:#fff4f1"><b>One step left: connect this Mac to Print@.</b> Enter your email, click the link we send, and jobs will dispatch through printat.co (branded sender, pickup codes, the full printer directory, nothing else to set up). Until then Print@ works in local-only mode through Mail.app.
+<form id=connectform class=inline onsubmit="return startConnect(event)"><input type=email id=cemail required placeholder="you@example.com" value="${esc(cfg.contactEmail || '')}" style="min-width:260px"><button class=primary>Connect</button></form>
+<div id=connectnote class=muted style="margin-top:6px">By connecting you agree to the <a href="https://printat.co/terms">Terms</a> and <a href="https://printat.co/privacy">Privacy Policy</a>. Prefer Terminal? <code>printat connect you@email</code> does the same.</div>
+<script>
+async function startConnect(e){e.preventDefault();const em=document.getElementById('cemail').value.trim();const n=document.getElementById('connectnote');n.textContent='Sending the link…';
+  const r=await fetch('/connect/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:em})}).then(r=>r.json()).catch(e=>({error:e.message}));
+  if(r.error){n.textContent=r.error;return false;}
+  n.innerHTML='<b>Check your inbox.</b> We emailed a link to '+em.replace(/</g,'&lt;')+'. Click it on any device; this page updates by itself. (Check spam once; sender print@printat.co.)';
+  const t=setInterval(async()=>{const s=await fetch('/connect/status').then(r=>r.json()).catch(()=>null);if(!s)return;if(s.status==='connected'){clearInterval(t);n.innerHTML='<b>Connected.</b> Reloading…';setTimeout(()=>location.href='/',800);}else if(s.status==='error'){clearInterval(t);n.textContent=s.error||'Something went wrong. Try again.';}},3000);
+  return false;}
+</script></div>`;
+}
+
 function page(cfg, demo = false) {
   const ps = printers();
   const mem = readJson(MEMORY_PATH, []);
@@ -89,11 +127,13 @@ td,th{padding:8px 10px;border-top:1px solid #eceff2;text-align:left;vertical-ali
 code{font:12px ui-monospace,Menlo,monospace;background:#eef0f3;padding:1px 4px;border-radius:3px}
 button{font:12px -apple-system,system-ui;padding:3px 9px;border:1px solid #c9ced5;border-radius:6px;background:#fff;cursor:pointer}button:hover{background:#f0f2f5}
 .muted{color:#6b7480}.path{font-size:12px;color:#6b7480;margin-top:6px}
+.card{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:12px 14px;margin:10px 0;font-size:14px}button.primary{background:#1c2430;color:#fff;border-color:#1c2430;font-weight:600;padding:6px 14px;font-size:13px}button.primary:hover{background:#2a3546}input[type=email]{font:13px -apple-system,system-ui;padding:6px 8px;border:1px solid #c9ced5;border-radius:6px}
 form.inline{display:flex;gap:8px;align-items:center;margin-top:10px}
 form.settings{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}form.settings label{display:flex;flex-direction:column;font-size:12px;color:#5b6573;gap:3px}form.settings label input[type=text]{min-width:0;width:100%;box-sizing:border-box}form.settings label.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:#1c2430}form.settings div{grid-column:1/-1}input[type=text]{font:13px -apple-system,system-ui;padding:4px 8px;border:1px solid #c9ced5;border-radius:6px;min-width:220px}
 </style>
 <h1>Print@<sup>™</sup> console</h1>
 ${updateBanner(demo)}
+${connectCard(cfg)}
 <div class="muted">Agent on 127.0.0.1:${cfg.port}. Printers also appear in System Settings › Printers &amp; Scanners. · <a href="/near">printers near me (map)</a>${fs.existsSync(SYNC_OUT) ? ' · directory: ' + (readJson(SYNC_OUT, {}).count || 0) + ' printers' : ''}</div>
 
 <h2>Report a problem</h2>
@@ -240,8 +280,23 @@ function handle(req, res, cfg) {
     res.end(page(cfg, /[?&]juice=1/.test(req.url)));
     return true;
   }
+  if (req.method === 'GET' && url === '/connect/status') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: connect.status, email: connect.email, error: connect.error })); return true; }
   if (req.method !== 'POST') return false;
   const back = () => { res.writeHead(303, { Location: '/' }); res.end(); };
+  if (url === '/connect/start') {
+    let raw = ''; req.on('data', d => raw += d); req.on('end', async () => {
+      let email = ''; try { email = String(JSON.parse(raw || '{}').email || '').trim().toLowerCase(); } catch {}
+      res.setHeader('Content-Type', 'application/json');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.writeHead(400); return res.end(JSON.stringify({ error: 'Enter a valid email.' })); }
+      await startConnect(cfg, email);
+      res.writeHead(connect.status === 'error' ? 502 : 200); res.end(JSON.stringify(connect.status === 'error' ? { error: connect.error } : { ok: true }));
+    }); return true;
+  }
+  if (url === '/connect/disconnect') return form(req, async () => {
+    if (cfg.cloudToken) { try { await fetch(`${(cfg.cloudBase || 'https://printat.co').replace(/\/+$/, '')}/api/device/revoke`, { method: 'POST', headers: { authorization: `Bearer ${cfg.cloudToken}` }, signal: AbortSignal.timeout(10000) }); } catch {} }
+    require('./config').save({ cloudToken: '', cloudEmail: '' }); Object.assign(cfg, { cloudToken: '', cloudEmail: '', cloudOn: false }); connect.status = 'idle'; log('console: disconnected from cloud');
+    back();
+  }), true;
   if (url === '/api/update') {
     const up = require('./update');
     up.apply().then(r => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(r)); if (r.ok && !r.upToDate && !r.needsInstall) up.restart(); })

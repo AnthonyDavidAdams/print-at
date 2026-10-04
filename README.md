@@ -42,7 +42,7 @@ Most people want the driver **plus our cloud** and nothing to run or configure. 
 default we recommend:
 
 ```
-printat connect you@email      # magic link to your inbox, click it, done
+printat connect you@email      # or enter your email in the console that opens; magic link, click it, done
 ```
 
 Connected, the driver dispatches through [printat.co](https://printat.co): orders are sent

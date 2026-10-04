@@ -143,7 +143,7 @@ b=json.dumps({"install_id":os.environ["INSTALL_ID"],"kind":os.environ["KIND"],"v
 urllib.request.urlopen(urllib.request.Request(os.environ["PRINTAT_BASE"]+"/api/install",data=b,headers={"content-type":"application/json"}),timeout=15)
 PY
 echo
-echo "Recommended: connect to the Print@ cloud so jobs dispatch through the network"
-echo "(branded sender, Print@ Network shops, pickup codes — no local email setup):"
-echo "    printat connect $([ -n "${SUDO_USER:-}" ] && sudo -u "$REAL_USER" echo your@email || echo your@email)"
-echo "Skip it to stay fully local: orders go out through Mail.app from whatever account you already use there."
+echo "Last step: connect this Mac to Print@ in the console that just opened (enter your email, click the link we send)."
+echo "    http://127.0.0.1:4243/     (or in Terminal: printat connect your@email)"
+echo "Skip it to stay fully local: orders go out through Mail.app from whatever account you already have there."
+sleep 1; sudo -u "$REAL_USER" open "http://127.0.0.1:4243/" >/dev/null 2>&1 || true

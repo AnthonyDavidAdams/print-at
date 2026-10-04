@@ -78,7 +78,7 @@ const server = http.createServer(async (req, res) => {
   const host = String(req.headers.host || '').replace(/:\d+$/, '');
   if (!LOCAL_HOSTS.has(host)) { res.writeHead(421); return res.end('wrong host'); }
   if (req.method !== 'GET' && req.headers.origin && !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(req.headers.origin)) { res.writeHead(403); return res.end('cross-origin request refused'); }
-  if (console_.handle(req, res, cfg)) return;
+  try { if (console_.handle(req, res, cfg)) return; } catch (e) { log(`console error: ${e.stack || e.message}`); if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'text/plain' }); } return res.end('console error: ' + e.message + '\nSee ~/Library/Logs/PrintAt/agent.log'); }
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ ok: true, dryRun: cfg.dryRun, skipClaude: cfg.skipClaude, update: update.status() }));
