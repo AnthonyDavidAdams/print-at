@@ -43,6 +43,7 @@ db.exec(`
 `);
 try { db.exec('ALTER TABLE jobs ADD COLUMN group_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE tickets ADD COLUMN dev_notes TEXT'); } catch {}
+try { db.exec('ALTER TABLE jobs ADD COLUMN dest TEXT'); } catch {} // JSON of a public-printer destination (web portal), when the job is not for a Network shop
 const now = () => Date.now();
 const rid = (n = 16) => require('crypto').randomBytes(n).toString('hex');
 const code = () => { for (let i = 0; i < 50; i++) { const c = String(require('crypto').randomInt(100000, 1000000)); if (!db.prepare("SELECT 1 FROM jobs WHERE pickup_code=? AND status!='done' LIMIT 1").get(c)) return c; } return String(require('crypto').randomInt(100000, 1000000)); };
@@ -72,8 +73,8 @@ module.exports = {
   createJobGroup(base, items) {
     const pc = code(), rt = rid(12), gid = rid(8); let firstId = null;
     for (const it of items) {
-      const r = db.prepare(`INSERT INTO jobs(shop_id,customer_name,customer_email,filename,filepath,pages,copies,color,pickup_code,group_id,rate_token,status,created)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(base.shop_id, base.customer_name || '', base.customer_email || '', it.filename || 'document.pdf', it.filepath, it.pages || 0, it.copies || 1, it.color ? 1 : 0, pc, gid, rt, base.status || 'queued', now());
+      const r = db.prepare(`INSERT INTO jobs(shop_id,customer_name,customer_email,filename,filepath,pages,copies,color,pickup_code,group_id,rate_token,status,created,dest)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(base.shop_id ?? null, base.customer_name || '', base.customer_email || '', it.filename || 'document.pdf', it.filepath, it.pages || 0, it.copies || 1, it.color ? 1 : 0, pc, gid, rt, base.status || 'queued', now(), base.dest || null);
       if (firstId == null) firstId = r.lastInsertRowid;
     }
     return { id: firstId, pickup_code: pc, rate_token: rt, group_id: gid };

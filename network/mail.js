@@ -86,9 +86,10 @@ function smtpAttach(to, cc, subject, text, att, replyTo) {
 // Reply-To honored and attachments as base64. Gmail API / SMTP below stay as fallbacks for
 // self-hosters who don't want a Resend account.
 const RESEND = process.env.RESEND_API_KEY || '';
-async function resendSend(to, cc, subject, text, att, replyTo) {
+async function resendSend(to, cc, subject, text, att, replyTo, from) {
   to = addr(to); if (!to) throw new Error('invalid recipient'); cc = cc ? addr(cc) : ''; replyTo = replyTo ? addr(replyTo) : ''; subject = hdr(subject);
-  const msg = { from: `${hdr(FROM_NAME)} <${FROM}>`, to: [to], subject, text };
+  const fromAddr = from && addr(from) && String(from).toLowerCase().endsWith('@' + FROM.split('@')[1]) ? addr(from) : FROM; // any mailbox on our verified domain
+  const msg = { from: `${hdr(FROM_NAME)} <${fromAddr}>`, to: [to], subject, text };
   if (cc) msg.cc = [cc];
   if (replyTo) msg.reply_to = replyTo;
   if (att) msg.attachments = [{ filename: att.filename, content: att.buffer.toString('base64') }];
@@ -106,8 +107,8 @@ module.exports = function send(to, subject, text, replyTo) {
   }
   try { return smtp(to, subject, text); } catch (e) { console.error('mail(smtp):', e.message); return false; }
 };
-module.exports.withAttachment = function sendAttach(to, cc, subject, text, att, replyTo) {
-  if (RESEND) return resendSend(to, cc, subject, text, att, replyTo);
+module.exports.withAttachment = function sendAttach(to, cc, subject, text, att, replyTo, from) {
+  if (RESEND) return resendSend(to, cc, subject, text, att, replyTo, from);
   if (process.env.GOOGLE_REFRESH_TOKEN) return gmailApiAttach(to, cc, subject, text, att, replyTo);
   return Promise.resolve().then(() => { if (!smtpAttach(to, cc, subject, text, att, replyTo)) throw new Error('smtp send failed'); return true; });
 };
