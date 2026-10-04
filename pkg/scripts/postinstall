@@ -9,10 +9,17 @@ if ! xcode-select -p >/dev/null 2>&1; then
   say "Print@ needs the Xcode Command Line Tools (a free download from Apple). Install them from the window that just opened, then run this installer again." caution; exit 1
 fi
 # Node.js is fetched by install.sh when the Mac has none.
+notify() { sudo -u "$U" osascript -e "display notification \"$1\" with title \"Print@ installer\"" >/dev/null 2>&1 || true; }
+notify "Installing: download, build helpers, register the printer. Usually 2 to 5 minutes. Live log: /tmp/printat-pkg.log"
+# Turn each "==> step" line of the install log into a notification so the Installer window is not a black box.
+( tail -n 0 -F "$LOG" 2>/dev/null | while IFS= read -r line; do case "$line" in "==> "*) notify "${line#==> }" ;; esac; done ) &
+TAILPID=$!
 {
   if [ -d "$H/printat/.git" ]; then sudo -u "$U" -i git -C "$H/printat" pull --ff-only -q || true
   else sudo -u "$U" -i git clone -q https://github.com/AnthonyDavidAdams/print-at "$H/printat"; fi
   SUDO_USER="$U" bash "$H/printat/install.sh"
-} >> "$LOG" 2>&1 || { say "The Print@ install hit a problem. The log is at /tmp/printat-pkg.log and a report went to Print@ support; help is at printat.co/help." stop; exit 1; }
+} >> "$LOG" 2>&1 || { kill $TAILPID 2>/dev/null; say "The Print@ install hit a problem. The log is at /tmp/printat-pkg.log and a report went to Print@ support; help is at printat.co/help." stop; exit 1; }
+kill $TAILPID 2>/dev/null
+notify "Done. Print@ Nearby is now a printer in every app."
 sudo -u "$U" open "http://127.0.0.1:4243/" >/dev/null 2>&1 || true
 exit 0
