@@ -125,10 +125,10 @@ function customerPage(preShop) {
   function query(loc){note.textContent='Finding shops…';
     fetch('/api/shops-nearby',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(loc||{})}).then(r=>r.json()).then(d=>{
       if(!d.located){note.textContent='Could not find your location. Add ?shop=ID or try again.';return}
-      var pr=d.printers||[];if(!d.shops.length&&!pr.length){note.textContent='Nothing within 25 miles yet: no Print@ Network shop and no public printer we know of. On a Mac, the Print@ driver can still find local shops.';return}
-      note.textContent=(d.shops.length+pr.length)+' place'+((d.shops.length+pr.length)>1?'s':'')+' near you';list.innerHTML=(pr.length?'<div class=m style=margin:6px 0><b>Public printers</b> · email the file, release it there with a code</div>'+pr.map(s=>'<div class=job data-key="'+esc(s.key)+'" style=cursor:pointer><b>'+esc(s.name)+'</b> <span class=m>'+esc(s.kind)+' · '+esc(s.network)+'</span><div class=m>'+esc(s.distance_mi)+' mi · '+esc(s.address)+(s.color?' · color':' · B&W')+'</div></div>').join(''):'')+(d.shops.length?'<div class=m style=margin:10px 0 6px><b>Print@ Network shops</b> · pickup code, they print it for you</div>':'')+d.shops.map(s=>'<div class=job data-id='+Number(s.id)+' style=cursor:pointer><b>'+esc(s.name)+'</b> '+(s.stars?'<span class=stars>'+'\\u2605'.repeat(Math.round(s.stars))+'</span>':'')+'<div class=m>'+esc(s.distance_mi)+' mi · '+esc(s.address)+'</div><div class=m>'+esc(s.hours||'')+' · B&W '+esc(s.price_bw||'?')+' color '+esc(s.price_color||'?')+'</div></div>').join('');
+      var pr=d.printers||[],lc=d.local||[];if(!d.shops.length&&!pr.length&&!lc.length){note.textContent='Nothing within 25 miles yet: no Print@ Network shop and no public printer we know of. On a Mac, the Print@ driver can still find local shops.';return}
+      var total=d.shops.length+pr.length+lc.length;note.textContent=total+' place'+(total>1?'s':'')+' near you';list.innerHTML=(lc.length?'<div class=m style=margin:6px 0><b>Local print shops</b> · researched by Print@ drivers</div>'+lc.map(s=>s.method==='email'?'<div class=job data-key="'+esc(s.key)+'" style=cursor:pointer><b>'+esc(s.name)+'</b> <span class=m>'+esc(s.brand&&s.brand!=='independent'?s.brand:'local shop')+(s.verified?' · verified':'')+'</span><div class=m>'+esc(s.distance_mi)+' mi · '+esc(s.address)+(s.hours?' · '+esc(s.hours):'')+(s.cost?'<br>'+esc(s.cost.slice(0,120)):'')+'</div></div>':'<div class=job style=opacity:.75><b>'+esc(s.name)+'</b> <span class=m>'+(s.method==='portal'?'<a href="'+esc(s.url)+'" target=_blank rel=noopener>order on their site</a>':'call ahead'+(s.phone?': '+esc(s.phone):''))+'</span><div class=m>'+esc(s.distance_mi)+' mi · '+esc(s.address)+(s.hours?' · '+esc(s.hours):'')+'</div></div>').join(''):'')+(pr.length?'<div class=m style=margin:6px 0><b>Public printers</b> · email the file, release it there with a code</div>'+pr.map(s=>'<div class=job data-key="'+esc(s.key)+'" style=cursor:pointer><b>'+esc(s.name)+'</b> <span class=m>'+esc(s.kind)+' · '+esc(s.network)+'</span><div class=m>'+esc(s.distance_mi)+' mi · '+esc(s.address)+(s.color?' · color':' · B&W')+'</div></div>').join(''):'')+(d.shops.length?'<div class=m style=margin:10px 0 6px><b>Print@ Network shops</b> · pickup code, they print it for you</div>':'')+d.shops.map(s=>'<div class=job data-id='+Number(s.id)+' style=cursor:pointer><b>'+esc(s.name)+'</b> '+(s.stars?'<span class=stars>'+'\\u2605'.repeat(Math.round(s.stars))+'</span>':'')+'<div class=m>'+esc(s.distance_mi)+' mi · '+esc(s.address)+'</div><div class=m>'+esc(s.hours||'')+' · B&W '+esc(s.price_bw||'?')+' color '+esc(s.price_color||'?')+'</div></div>').join('');
         shops.style.display='block';
-        document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=el.dataset.key?pr.find(s=>s.key==el.dataset.key):d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+esc(pick.name)+'</b><br>'+esc(pick.address);send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
+        document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=el.dataset.key?(pr.find(s=>s.key==el.dataset.key)||lc.find(s=>s.key==el.dataset.key)):d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+esc(pick.name)+'</b><br>'+esc(pick.address);send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
       })}
   find.onclick=()=>{if(!items.length){note.textContent='Add at least one file first.';return}if(items.some(it=>!it.b64)){note.textContent='Still reading a file, one second.';return}note.textContent='Locating…';
     if(!navigator.geolocation){query(null);return}
@@ -140,7 +140,7 @@ function customerPage(preShop) {
     var pk=document.getElementById('pick');if(pk)pk.innerHTML='<b>'+esc(PRE.name)+'</b><br>'+esc(PRE.address||'');send.style.display='block';
     find.textContent='Choose files, then send'; find.onclick=()=>{if(!items.length){note.textContent='Add at least one file first.';return}send.scrollIntoView({behavior:'smooth'})};}
   go.onclick=()=>{if(!pick)return;if(!document.getElementById('agree').checked){result.innerHTML='Please agree to the Terms of Use first.';return;}result.innerHTML='Sending…';
-    fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,printer_key:pick.key,name:cname.value,email:cemail.value,agree:true,terms_version:'${legal.VERSION}',items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
+    fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,printer_key:pick.kind==='shop'?undefined:pick.key,fact_key:pick.kind==='shop'?pick.key:undefined,name:cname.value,email:cemail.value,agree:true,terms_version:'${legal.VERSION}',items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
       if(d.pending)result.innerHTML='<div class=job style=background:#fff7e0><b>Check your email.</b><br>We sent a confirmation link to <b>'+esc(d.email)+'</b>. Tap it to release your '+Number(d.count)+' file'+(d.count>1?'s':'')+' to '+esc(pick.name)+' — your pickup code appears right after. (Look in spam if it is not there in a minute.)</div>';
       else if(d.pickup_code)result.innerHTML='<div class=job style=background:#e8f5ec><b>Sent '+Number(d.count)+' file'+(d.count>1?'s':'')+' to '+esc(pick.name)+'!</b><br>Show this pickup code at the counter:<br><span style="font-family:Anton;font-size:34px;letter-spacing:3px">'+d.pickup_code+'</span></div>';
       else result.innerHTML='Error: '+(d.error||'failed')})};
@@ -378,7 +378,16 @@ const server = http.createServer(async (req, res) => {
         distance_mi: Math.round(miles({ lat, lon }, s) * 10) / 10, stars: r.avg ? Math.round(r.avg * 10) / 10 : 0,
         lat: s.lat, lon: s.lon }; }).filter(s => s.distance_mi <= radius).sort((a, b) => a.distance_mi - b.distance_mi);
       const printers = directory.nearby(lat, lon, radius, 12);
-      return json(res, 200, { shops, printers, located: true });
+      // Local shops the drivers have already researched (pooled facts): the web gets them for free.
+      const seen = new Set(); const local = [];
+      for (const f of db.factsNear(lat, lon, radius).map(f => ({ ...f, distance_mi: Math.round(directory.miles({ lat, lon }, f) * 10) / 10 })).filter(f => f.distance_mi <= radius).sort((a, b) => (a.method === 'email' ? 0 : a.method === 'portal' ? 1 : 2) - (b.method === 'email' ? 0 : b.method === 'portal' ? 1 : 2) || a.distance_mi - b.distance_mi)) {
+        if (/printspots\.com$|printme\.com$/i.test(f.email || '')) continue; // the directory lists those
+        const id = (f.email || f.url || f.name).toLowerCase(); if (seen.has(id)) continue; seen.add(id);
+        local.push({ key: 'sf:' + f.key, kind: 'shop', name: f.name, address: f.address, brand: f.brand || '', method: f.method, email: f.method === 'email' ? f.email : '', url: f.url || '', phone: f.phone || '', hours: f.hours_today || '', cost: f.cost_basis || '', distance_mi: f.distance_mi, verified: !!f.confirmations,
+          how: f.method === 'email' ? 'Email order. The shop replies to you with the price and when it is ready; pick up with the name on the cover sheet.' : f.method === 'portal' ? 'Order on their website.' : 'Call ahead.' });
+        if (local.length >= 15) break;
+      }
+      return json(res, 200, { shops, printers, local, located: true });
     }
     // status of a job group by pickup code
     if (req.method === 'GET' && url === '/api/status') {
@@ -393,7 +402,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/send') {
       if (limited('send:' + clientIp(req), 20, 3600e3)) return json(res, 429, { error: 'too many uploads; try again later' });
       const b = JSON.parse((await body(req, BIG)).toString() || '{}');
-      const printer = b.printer_key ? directory.find(String(b.printer_key)) : null;
+      let printer = b.printer_key ? directory.find(String(b.printer_key)) : null;
+      if (!printer && b.fact_key) { const f = db.factsFor([String(b.fact_key).replace(/^sf:/, '')])[String(b.fact_key).replace(/^sf:/, '')]; if (f && f.method === 'email' && f.email) printer = { kind: 'shop', key: 'sf:' + f.key, network: 'local', name: f.name, address: f.address, email: f.email, phone: f.phone || '', how: 'Email order. The shop replies to you with the price and when it is ready; pick up with the name on the cover sheet.', orderStyle: true }; }
       const shop = printer ? null : db.shopById(Number(b.shop_id)); if (!shop && !printer) return json(res, 404, { error: 'shop not found' });
       const destName = printer ? printer.name : shop.name;
       const email = String(b.email || '').trim().toLowerCase();
@@ -433,7 +443,13 @@ const server = http.createServer(async (req, res) => {
           db.logDispatch({ device_token: 'web:' + gid, email: first.customer_email, shop_name: dest.name, shop_address: dest.address, to_email: dest.email, subject: j.filename, filename: j.filename, ref, status: 'sending' });
           try {
             if (!j.filepath || !fs.existsSync(j.filepath)) throw new Error('file missing');
-            await mail.withAttachment(dest.email, '', j.filename.replace(/\.[a-z0-9]+$/i, '') || 'Print job', 'Print the attached document.', { filename: j.filename.replace(/[^\w.]+/g, '_'), buffer: fs.readFileSync(j.filepath) }, sender, sender);
+            let buf = fs.readFileSync(j.filepath), subject = j.filename.replace(/\.[a-z0-9]+$/i, '') || 'Print job', text = 'Print the attached document.';
+            if (dest.orderStyle) { // a real shop: cover sheet + an order email like the driver sends
+              try { const c = await cover.withCover(buf, { name: first.customer_name, email: first.customer_email, code: ref, ref, shop: dest.name, filename: j.filename, copies: j.copies, color: !!j.color }); buf = c.buffer; j.pages = c.pages; } catch (e) { console.error('cover sheet:', e.message); }
+              subject = `Print order: ${j.filename} (${j.pages ? j.pages + ' pp x ' : ''}${j.copies} ${j.copies === 1 ? 'copy' : 'copies'}, ${j.color ? 'color' : 'B&W'})`;
+              text = `Hello,\n\nPlease print the attached PDF: ${j.pages ? j.pages + ' pages, ' : ''}${j.copies} ${j.copies === 1 ? 'copy' : 'copies'}, ${j.color ? 'full color' : 'black and white'}, single-sided, standard paper. Pickup name: ${first.customer_name || first.customer_email}.\n\nPlease reply with the price and when it will be ready; your reply reaches the customer directly.\n\nThanks,\n${first.customer_name || 'Print@ customer'}\n\n— Sent via Print@ (printat.co) on the customer's behalf, ref ${ref}. The first page of the attachment is a cover sheet with the pickup name.`;
+            }
+            await mail.withAttachment(dest.email, '', subject, text, { filename: j.filename.replace(/[^\w.]+/g, '_'), buffer: buf }, sender, sender);
             db.setDispatchStatus(ref, 'sent'); db.setJobStatus(j.id, 'done'); results.push({ ok: true, ref, filename: j.filename });
           } catch (e) { db.setDispatchStatus(ref, 'failed'); results.push({ ok: false, ref, filename: j.filename, error: e.message }); console.error('web dispatch:', e.message); }
         }
@@ -441,10 +457,10 @@ const server = http.createServer(async (req, res) => {
         const sent = results.filter(r => r.ok), failed = results.filter(r => !r.ok);
         const where = `${dest.name}${dest.address ? ', ' + dest.address : ''}`;
         mail(first.customer_email, `${sent.length ? 'Sent' : 'Not sent'}: your file${jobs.length > 1 ? 's' : ''} for ${dest.name}`,
-          `${sent.length ? `${sent.length} file${sent.length > 1 ? 's were' : ' was'} emailed to the printer at ${where}.\n\n${dest.how}\nThe release code, and anything the printer or desk sends back, arrives in this inbox. Pickup name: ${first.customer_name || first.customer_email}.` : ''}${failed.length ? `\n\nCould not send: ${failed.map(f => f.filename + ' (' + f.error + ')').join(', ')}. Try again at ${BASE}/app or send it from a Mac with Print@.` : ''}\n\nReference${sent.length > 1 ? 's' : ''}: ${results.map(r => r.ref).join(', ')}. Reply to this email if you need help.`);
+          `${sent.length ? `${sent.length} file${sent.length > 1 ? 's were' : ' was'} emailed to ${dest.orderStyle ? '' : 'the printer at '}${where}.\n\n${dest.how}\n${dest.orderStyle ? 'Their reply (price, pickup time)' : 'The release code, and anything the printer or desk sends back,'} arrives in this inbox. Pickup name: ${first.customer_name || first.customer_email}.` : ''}${failed.length ? `\n\nCould not send: ${failed.map(f => f.filename + ' (' + f.error + ')').join(', ')}. Try again at ${BASE}/app or send it from a Mac with Print@.` : ''}\n\nReference${sent.length > 1 ? 's' : ''}: ${results.map(r => r.ref).join(', ')}. Reply to this email if you need help.`);
         return res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(page((sent.length ? 'Sent to ' : 'Not sent: ') + dest.name, `<div class=head><h1>PRINT<span class=at>@</span></h1></div>
           <div class=card style="background:${sent.length ? '#e8f5ec' : '#fff4f1'}"><div class=lab>${sent.length ? 'Sent' : 'Not sent'}</div><p><b>${sent.length} of ${jobs.length} file${jobs.length > 1 ? 's' : ''}</b> emailed to <b>${esc(dest.name)}</b>${dest.address ? ' · ' + esc(dest.address) : ''}.</p>
-          <p>${esc(dest.how)}</p><p>The release code and any reply land in <b>${esc(first.customer_email)}</b>. Pickup name: <b>${esc(first.customer_name || first.customer_email)}</b>.</p>
+          <p>${esc(dest.how)}</p><p>${dest.orderStyle ? 'Their reply lands' : 'The release code and any reply land'} in <b>${esc(first.customer_email)}</b>. Pickup name: <b>${esc(first.customer_name || first.customer_email)}</b>.</p>
           ${failed.length ? `<p class=muted>Could not send: ${failed.map(f => esc(f.filename) + ' (' + esc(f.error) + ')').join(', ')}.</p>` : ''}
           <p class=muted>Reference: ${results.map(r => esc(r.ref)).join(', ')}</p></div>`));
       }
