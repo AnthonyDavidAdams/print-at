@@ -101,6 +101,7 @@ function customerPage(preShop) {
   <div class=card id=shops style=display:none><div class=lab>2 · Pick a shop</div><div id=list></div></div>
   <div class=card id=send style=display:none><div class=lab>3 · Send</div><div id=pick></div><button class=btn red id=go>Send to shop</button><div id=result></div></div>
   <script>
+  var $=function(id){return document.getElementById(id)};var file=$('file'),find=$('find'),note=$('note'),shops=$('shops'),list=$('list'),send=$('send'),go=$('go'),result=$('result'),cname=$('cname'),cemail=$('cemail');
   var items=[],pick=null;var esc=function(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
   function render(){var box=document.getElementById('items');box.innerHTML=items.map((it,i)=>
     '<div class=job style="display:flex;gap:10px;align-items:center;margin-top:10px">'+
@@ -128,7 +129,7 @@ function customerPage(preShop) {
         shops.style.display='block';
         document.querySelectorAll('#list .job').forEach(el=>el.onclick=()=>{pick=d.shops.find(s=>s.id==el.dataset.id);document.querySelectorAll('#list .job').forEach(x=>x.style.background='#fff');el.style.background='#d09a3c';document.getElementById('pick').innerHTML='<b>'+esc(pick.name)+'</b><br>'+esc(pick.address);send.style.display='block';send.scrollIntoView({behavior:'smooth'})});
       })}
-  find.onclick=()=>{if(!items.length)return alert('Add at least one file to print');if(items.some(it=>!it.b64))return alert('Still reading a file — one sec');note.textContent='Locating…';
+  find.onclick=()=>{if(!items.length){note.textContent='Add at least one file first.';return}if(items.some(it=>!it.b64)){note.textContent='Still reading a file, one second.';return}note.textContent='Locating…';
     if(!navigator.geolocation){query(null);return}
     var done=false;var t=setTimeout(()=>{if(!done){done=true;note.textContent='Using approximate location…';query(null)}},7000);
     navigator.geolocation.getCurrentPosition(p=>{if(done)return;done=true;clearTimeout(t);query({lat:p.coords.latitude,lon:p.coords.longitude})},
@@ -136,7 +137,7 @@ function customerPage(preShop) {
   var PRE=%PRESHOP%;
   if(PRE){pick=PRE;document.getElementById('note').textContent='Sending to '+PRE.name;shops.style.display='none';
     var pk=document.getElementById('pick');if(pk)pk.innerHTML='<b>'+esc(PRE.name)+'</b><br>'+esc(PRE.address||'');send.style.display='block';
-    find.textContent='Choose files, then send'; find.onclick=()=>{if(!items.length)return alert('Add a file');send.scrollIntoView({behavior:'smooth'})};}
+    find.textContent='Choose files, then send'; find.onclick=()=>{if(!items.length){note.textContent='Add at least one file first.';return}send.scrollIntoView({behavior:'smooth'})};}
   go.onclick=()=>{if(!pick)return;if(!document.getElementById('agree').checked){result.innerHTML='Please agree to the Terms of Use first.';return;}result.innerHTML='Sending…';
     fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({shop_id:pick.id,name:cname.value,email:cemail.value,agree:true,terms_version:'${legal.VERSION}',items:items.map(it=>({filename:it.name,fileB64:it.b64,copies:it.copies,color:it.color}))})}).then(r=>r.json()).then(d=>{
       if(d.pending)result.innerHTML='<div class=job style=background:#fff7e0><b>Check your email.</b><br>We sent a confirmation link to <b>'+esc(d.email)+'</b>. Tap it to release your '+Number(d.count)+' file'+(d.count>1?'s':'')+' to '+esc(pick.name)+' — your pickup code appears right after. (Look in spam if it is not there in a minute.)</div>';
