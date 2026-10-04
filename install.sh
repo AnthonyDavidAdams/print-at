@@ -136,10 +136,10 @@ trap - ERR
 # Tell Print@ an install finished (versions only, no personal data) so the maintainer hears about it.
 IDF="$REAL_HOME/Library/Application Support/PrintAt/install-id"; KIND=update
 [ -s "$IDF" ] || { KIND=new; sudo -u "$REAL_USER" sh -c "mkdir -p '$(dirname "$IDF")'; umask 077; head -c 16 /dev/urandom | xxd -p > '$IDF'" 2>/dev/null || true; }
-INSTALL_ID="$(cat "$IDF" 2>/dev/null || echo unknown)" KIND="$KIND" VERSION="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo ?)" NODEV="$("$NODE" --version 2>/dev/null || echo ?)" PRINTAT_BASE="$PRINTAT_BASE" python3 - <<'PY' >/dev/null 2>&1 || true
+INSTALL_ID="$(cat "$IDF" 2>/dev/null || echo unknown)" KIND="$KIND" VERSION="$(sudo -u "$REAL_USER" git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo ?)" AGENT_UP="$(curl -sf http://127.0.0.1:4243/health >/dev/null 2>&1 && echo yes || echo no)" NODEV="$("$NODE" --version 2>/dev/null || echo ?)" PRINTAT_BASE="$PRINTAT_BASE" python3 - <<'PY' >/dev/null 2>&1 || true
 import json,os,platform,subprocess,urllib.request
 macos=subprocess.run(["sw_vers","-productVersion"],capture_output=True,text=True).stdout.strip()
-b=json.dumps({"install_id":os.environ["INSTALL_ID"],"kind":os.environ["KIND"],"version":os.environ["VERSION"],"macos":macos,"arch":platform.machine(),"node":os.environ["NODEV"]}).encode()
+b=json.dumps({"install_id":os.environ["INSTALL_ID"],"kind":os.environ["KIND"],"version":os.environ["VERSION"],"macos":macos,"arch":platform.machine(),"node":os.environ["NODEV"]+(" agent:"+os.environ.get("AGENT_UP","?"))}).encode()
 urllib.request.urlopen(urllib.request.Request(os.environ["PRINTAT_BASE"]+"/api/install",data=b,headers={"content-type":"application/json"}),timeout=15)
 PY
 echo
