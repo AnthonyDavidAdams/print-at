@@ -18,6 +18,9 @@ function diagnostics(cfg) {
   const redact = t => String(t || '').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '<email>').replace(/\(?\b[2-9]\d{2}\)?[-. ]\d{3}[-. ]\d{4}\b/g, '<phone>');
   const logFile = path.join(cfgmod.LOG_DIR, 'agent.log');
   let logTail = ''; try { const l = fs.readFileSync(logFile, 'utf8').trim().split('\n'); logTail = l.slice(-80).join('\n'); } catch {}
+  // When the agent is down, the crash is in stderr.log and launchd knows why it is not running.
+  let stderrTail = ''; try { const l = fs.readFileSync(path.join(cfgmod.LOG_DIR, 'stderr.log'), 'utf8').trim().split('\n'); stderrTail = l.slice(-40).join('\n'); } catch {}
+  const launchd = (() => { const out = sh('launchctl', ['print', `gui/${process.getuid()}/io.printat.agent`]); if (!out) return '(not loaded)'; return out.split('\n').filter(l => /state =|pid =|last exit|runs =|program =|spawn type|path =/.test(l)).map(l => l.trim()).join('; ').slice(0, 600); })();
   let receipt = ''; try { const jobs = fs.readdirSync(cfgmod.JOBS_DIR).sort().reverse(); for (const j of jobs) { const r = path.join(cfgmod.JOBS_DIR, j, 'receipt.md'); if (fs.existsSync(r)) { receipt = fs.readFileSync(r, 'utf8').slice(0, 4000); break; } } } catch {}
   return {
     macos: sh('sw_vers', ['-productVersion']), node: process.version, arch: os.arch(),
@@ -25,7 +28,7 @@ function diagnostics(cfg) {
     claude_cli: sh('claude', ['--version']) || '(not found)',
     printers: sh('lpstat', ['-p']), backend: fs.existsSync('/usr/libexec/cups/backend/printat') ? 'installed' : 'MISSING',
     agent: (() => { try { return sh('curl', ['-s', '-m', '3', `http://127.0.0.1:${cfg.port}/health`]) || '(no answer)'; } catch { return '(no answer)'; } })(),
-    connected: cloud.connected(cfg), config: safe, log_tail: redact(logTail), last_receipt: redact(receipt),
+    connected: cloud.connected(cfg), launchd, config: safe, log_tail: redact(logTail), stderr_tail: redact(stderrTail), last_receipt: redact(receipt),
   };
 }
 
