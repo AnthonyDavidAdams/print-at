@@ -8,7 +8,9 @@ PRINTAT_BASE="${PRINTAT_BASE:-https://printat.co}"
 
 # Everything below is logged; if the install fails (or logs a warning) we offer to send the
 # log to Print@ support so the problem gets fixed for the next person too.
-REAL_USER_EARLY="${SUDO_USER:-$USER}"; LOGDIR="$(eval echo "~$REAL_USER_EARLY")/Library/Logs/PrintAt"; mkdir -p "$LOGDIR" 2>/dev/null || LOGDIR=/tmp
+REAL_USER_EARLY="${SUDO_USER:-$USER}"; LOGDIR="$(eval echo "~$REAL_USER_EARLY")/Library/Logs/PrintAt"
+# Created AS THE USER: a root-owned log folder stops launchd from spawning the agent (exit 78 EX_CONFIG).
+sudo -u "$REAL_USER_EARLY" mkdir -p "$LOGDIR" 2>/dev/null || mkdir -p "$LOGDIR" 2>/dev/null || LOGDIR=/tmp
 INSTALL_LOG="$LOGDIR/install.log"; sudo -u "$REAL_USER_EARLY" sh -c "rm -f '$INSTALL_LOG'; umask 077; : > '$INSTALL_LOG'" 2>/dev/null || INSTALL_LOG=/tmp/printat-install.log
 exec > >(tee -a "$INSTALL_LOG") 2>&1
 report_install_problem() {
@@ -103,13 +105,15 @@ sudo -u "$REAL_USER" mkdir -p "$REAL_HOME/Library/LaunchAgents"
 sed -e "s|__NODE__|$NODE|g" -e "s|__ROOT__|$ROOT|g" -e "s|__HOME__|$REAL_HOME|g" "$ROOT/launchd/io.printat.agent.plist.template" \
   | sudo -u "$REAL_USER" tee "$PLIST" >/dev/null
 plutil -lint "$PLIST" >/dev/null || { echo "!! generated launchd plist is invalid"; exit 1; }
+# Everything launchd and the agent touch must belong to the user, whatever ran before us as root.
+chown -R "$REAL_USER" "$REAL_HOME/Library/Logs/PrintAt" "$APP" "$ROOT" 2>/dev/null || true
 launchctl bootout "gui/$REAL_UID/io.printat.agent" 2>/dev/null || true
 sleep 0.5
 # launchd sometimes answers "Bootstrap failed: 5: Input/output error" when the old instance is
 # still winding down; a kickstart right after brings it up. Neither is fatal.
 launchctl bootstrap "gui/$REAL_UID" "$PLIST" 2>/dev/null || launchctl kickstart -k "gui/$REAL_UID/io.printat.agent" 2>/dev/null || true
 for i in 1 2 3 4 5 6; do curl -sf "http://127.0.0.1:4243/health" >/dev/null && break; sleep 1; done
-if curl -sf "http://127.0.0.1:4243/health" >/dev/null; then echo "    agent is up"; else echo "    WARNING: agent did not answer on :4243 — check ~/Library/Logs/PrintAt/"; fi
+if curl -sf "http://127.0.0.1:4243/health" >/dev/null; then echo "    agent is up"; else echo "    WARNING: agent did not answer on :4243 — launchd says: $(launchctl print "gui/$REAL_UID/io.printat.agent" 2>/dev/null | grep -E 'state =|last exit' | tr -s ' ' | tr '\n' ';') — check ~/Library/Logs/PrintAt/"; fi
 
 echo "==> Installing 'printat' command"
 mkdir -p /usr/local/bin 2>/dev/null; ln -sf "$ROOT/bin/printat" /usr/local/bin/printat 2>/dev/null && echo "    /usr/local/bin/printat -> repo" || echo "    (could not symlink; run $ROOT/bin/printat directly)"
