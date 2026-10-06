@@ -89,9 +89,10 @@ const RESEND = process.env.RESEND_API_KEY || '';
 async function resendSend(to, cc, subject, text, att, replyTo, from) {
   to = addr(to); if (!to) throw new Error('invalid recipient'); cc = cc ? addr(cc) : ''; replyTo = replyTo ? addr(replyTo) : ''; subject = hdr(subject);
   // from: an address on our verified domain, optionally with a display name: "Jane Lee via Print@ <job-x@printat.co>"
-  const fm = String(from || '').match(/^\s*(?:"?([^"<]*?)"?\s*)?<?([^<>\s]+@[^<>\s]+)>?\s*$/);
-  const fromAddr = fm && addr(fm[2]) && fm[2].toLowerCase().endsWith('@' + FROM.split('@')[1]) ? addr(fm[2]) : FROM;
-  const fromName = fm && fm[1] && fromAddr !== FROM ? hdr(fm[1]).slice(0, 60) : FROM_NAME;
+  const raw = String(from || '').trim(); const lt = raw.indexOf('<');
+  const fAddr = lt >= 0 ? raw.slice(lt + 1).replace(/>.*$/, '').trim() : raw, fName = lt >= 0 ? raw.slice(0, lt).replace(/"/g, '').trim() : '';
+  const fromAddr = fAddr && addr(fAddr) && fAddr.toLowerCase().endsWith('@' + FROM.split('@')[1]) ? addr(fAddr) : FROM;
+  const fromName = fName && fromAddr !== FROM ? hdr(fName).slice(0, 60) : FROM_NAME;
   const msg = { from: `${hdr(fromName)} <${fromAddr}>`, to: [to], subject, text };
   if (cc) msg.cc = [cc];
   if (replyTo) msg.reply_to = replyTo;
