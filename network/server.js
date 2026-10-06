@@ -239,6 +239,30 @@ function sweep() {
 }
 setTimeout(sweep, 5000); setInterval(sweep, 3600e3).unref();
 
+// Shops that go quiet: one short follow-up from the same job address after ~4 business hours
+// (free, unlike a phone call), and a note to the person after a day with the shop's phone number.
+const HOUR = 3600e3;
+function businessHoursNow() { const h = (new Date(Date.now() - 7 * HOUR)).getUTCHours(), d = (new Date(Date.now() - 7 * HOUR)).getUTCDay(); return d >= 1 && d <= 6 && h >= 9 && h < 18; } // Pacific-ish, Mon-Sat 9-6
+async function nudgeQuiet() {
+  if (!businessHoursNow() && process.env.PRINTAT_NUDGE_ANYTIME !== '1') return;
+  for (const d of db.quietDispatches(4 * HOUR, 7 * 864e5, 'nudged')) {
+    try {
+      const who = (d.customer_name || '').trim(), from = `${who ? who + ' via Print@' : 'Print@'} <${replyAddr('job', d.ref)}>`;
+      await mail(d.to_email, `Re: ${d.subject || 'Print order ' + d.ref}`, `Hello,\n\nChecking that you received the print job emailed earlier (${d.filename || 'attached PDF'}, ref ${d.ref})${who ? ' for ' + who : ''}. Could you reply with the price and when it will be ready for pickup? Replying to this email reaches the customer directly.\n\nThank you,\n${who || 'Print@'}`, d.email, from);
+      db.markDispatch(d.ref, 'nudged'); console.log(`nudge: ${d.ref} -> ${d.to_email}`);
+    } catch (e) { console.error('nudge:', d.ref, e.message); }
+  }
+  for (const d of db.quietDispatches(24 * HOUR, 7 * 864e5, 'customer_told')) {
+    try {
+      if (!d.email) { db.markDispatch(d.ref, 'customer_told'); continue; }
+      const f = db.factPhoneFor(d.to_email);
+      await mail(d.email, `No reply yet from ${d.shop_name || d.to_email} (ref ${d.ref})`, `Your print job (${d.filename || 'PDF'}) was emailed to ${d.shop_name || d.to_email}${d.shop_address ? ', ' + d.shop_address : ''} and we sent a follow-up, but they have not replied.\n\nSome shops only print when someone calls.${f && f.phone ? ` Their number: ${f.phone}.` : ''} Mention the pickup name on the cover sheet and the reference ${d.ref}.\n\nIf they do reply, it will land in this inbox.`);
+      db.markDispatch(d.ref, 'customer_told'); console.log(`quiet shop: told ${d.email} about ${d.ref}`);
+    } catch (e) { console.error('quiet-shop note:', d.ref, e.message); }
+  }
+}
+setTimeout(() => nudgeQuiet().catch(e => console.error('nudge:', e.message)), 15000); setInterval(() => nudgeQuiet().catch(e => console.error('nudge:', e.message)), HOUR).unref();
+
 function jobListing(items) { return items.map(x => `  • ${x.filename} — ${x.copies} cop${x.copies === 1 ? 'y' : 'ies'}, ${x.color ? 'color' : 'B&W'}`).join('\n'); }
 function notifyShop(shop, jobs, customerName) {
   mail(shop.email, `New print job (${jobs.length} file${jobs.length > 1 ? 's' : ''}) — pickup ${jobs[0].pickup_code}`,
@@ -440,7 +464,7 @@ const server = http.createServer(async (req, res) => {
         const results = [];
         for (const j of jobs) {
           const ref = 'PA-' + db.rid(6).toUpperCase(); const sender = replyAddr('job', ref);
-          db.logDispatch({ device_token: 'web:' + gid, email: first.customer_email, shop_name: dest.name, shop_address: dest.address, to_email: dest.email, subject: j.filename, filename: j.filename, ref, status: 'sending' });
+          db.logDispatch({ device_token: 'web:' + gid, email: first.customer_email, shop_name: dest.name, shop_address: dest.address, to_email: dest.email, subject: j.filename, filename: j.filename, ref, status: 'sending', customer_name: first.customer_name || '' });
           try {
             if (!j.filepath || !fs.existsSync(j.filepath)) throw new Error('file missing');
             let buf = fs.readFileSync(j.filepath), subject = j.filename.replace(/\.[a-z0-9]+$/i, '') || 'Print job', text = 'Print the attached document.';
@@ -536,7 +560,7 @@ const server = http.createServer(async (req, res) => {
       if (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(String(b.to)) || (b.cc && !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(String(b.cc)))) return json(res, 400, { error: 'invalid recipient' });
       if (String(b.fileB64).length > 25e6) return json(res, 413, { error: 'file too large' });
       const ref = 'PA-' + db.rid(6).toUpperCase();
-      db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref, status: 'sending' });
+      db.logDispatch({ device_token: auth, email: dev.email, shop_name: b.shop && b.shop.name, shop_address: b.shop && b.shop.address, to_email: b.to, subject: b.subject || '', filename: b.filename || '', ref, status: 'sending', customer_name: (b.meta && b.meta.name) || dev.name || '' });
       // Cover sheet on the front (name, pickup code, pages, our message slot) unless the
       // driver opted out (kiosk/release-style destinations, where the customer prints it themselves).
       let fileBuf = Buffer.from(b.fileB64, 'base64');

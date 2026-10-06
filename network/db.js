@@ -43,7 +43,10 @@ db.exec(`
 `);
 try { db.exec('ALTER TABLE jobs ADD COLUMN group_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE tickets ADD COLUMN dev_notes TEXT'); } catch {}
-try { db.exec('ALTER TABLE jobs ADD COLUMN dest TEXT'); } catch {} // JSON of a public-printer destination (web portal), when the job is not for a Network shop
+try { db.exec('ALTER TABLE jobs ADD COLUMN dest TEXT'); } catch {}
+try { db.exec('ALTER TABLE dispatches ADD COLUMN nudged INTEGER'); } catch {}
+try { db.exec('ALTER TABLE dispatches ADD COLUMN customer_told INTEGER'); } catch {}
+try { db.exec('ALTER TABLE dispatches ADD COLUMN customer_name TEXT'); } catch {} // JSON of a public-printer destination (web portal), when the job is not for a Network shop
 const now = () => Date.now();
 const rid = (n = 16) => require('crypto').randomBytes(n).toString('hex');
 const code = () => { for (let i = 0; i < 50; i++) { const c = String(require('crypto').randomInt(100000, 1000000)); if (!db.prepare("SELECT 1 FROM jobs WHERE pickup_code=? AND status!='done' LIMIT 1").get(c)) return c; } return String(require('crypto').randomInt(100000, 1000000)); };
@@ -188,8 +191,11 @@ module.exports = {
   setTicketNotes(id, notes) { db.prepare('UPDATE tickets SET dev_notes=? WHERE id=?').run(String(notes || '').slice(0, 20000), id); },
   dispatchByRef: r => db.prepare('SELECT * FROM dispatches WHERE ref=? ORDER BY id DESC').get(String(r || '').toUpperCase()),
   setDispatchStatus(ref, status) { db.prepare('UPDATE dispatches SET status=? WHERE ref=?').run(status, ref); },
+  quietDispatches(olderThanMs, youngerThanMs, col) { const t = now(); return db.prepare(`SELECT * FROM dispatches WHERE status='sent' AND ${col} IS NULL AND created < ? AND created > ? AND to_email NOT LIKE '%@printspots.com' AND to_email NOT LIKE '%@printme.com' ORDER BY id ASC LIMIT 50`).all(t - olderThanMs, t - youngerThanMs); },
+  markDispatch(ref, col) { db.prepare(`UPDATE dispatches SET ${col}=? WHERE ref=?`).run(now(), ref); },
+  factPhoneFor(email) { const r = db.prepare('SELECT phone, name FROM shop_facts WHERE email=? AND phone IS NOT NULL AND phone<>? LIMIT 1').get(String(email || '').toLowerCase(), ''); return r || null; },
   logReply(r) { db.prepare('INSERT INTO replies(kind,ref,from_email,to_email,forwarded_to,subject,text,created) VALUES(?,?,?,?,?,?,?,?)').run(r.kind, r.ref, r.from_email, r.to_email, r.forwarded_to || '', r.subject || '', (r.text || '').slice(0, 20000), now()); },
   repliesFor: (kind, ref) => db.prepare('SELECT * FROM replies WHERE kind=? AND ref=? ORDER BY id').all(kind, ref),
-  logDispatch(d) { const r = db.prepare(`INSERT INTO dispatches(device_token,email,shop_name,shop_address,to_email,subject,filename,ref,status,created)
-    VALUES(?,?,?,?,?,?,?,?,?,?)`).run(d.device_token || '', d.email || '', d.shop_name || '', d.shop_address || '', d.to_email || '', d.subject || '', d.filename || '', d.ref, d.status || 'sent', now()); return r.lastInsertRowid; },
+  logDispatch(d) { const r = db.prepare(`INSERT INTO dispatches(device_token,email,shop_name,shop_address,to_email,subject,filename,ref,status,created,customer_name)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(d.device_token || '', d.email || '', d.shop_name || '', d.shop_address || '', d.to_email || '', d.subject || '', d.filename || '', d.ref, d.status || 'sent', now(), d.customer_name || ''); return r.lastInsertRowid; },
 };
