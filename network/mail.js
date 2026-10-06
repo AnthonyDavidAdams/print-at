@@ -88,8 +88,11 @@ function smtpAttach(to, cc, subject, text, att, replyTo) {
 const RESEND = process.env.RESEND_API_KEY || '';
 async function resendSend(to, cc, subject, text, att, replyTo, from) {
   to = addr(to); if (!to) throw new Error('invalid recipient'); cc = cc ? addr(cc) : ''; replyTo = replyTo ? addr(replyTo) : ''; subject = hdr(subject);
-  const fromAddr = from && addr(from) && String(from).toLowerCase().endsWith('@' + FROM.split('@')[1]) ? addr(from) : FROM; // any mailbox on our verified domain
-  const msg = { from: `${hdr(FROM_NAME)} <${fromAddr}>`, to: [to], subject, text };
+  // from: an address on our verified domain, optionally with a display name: "Jane Lee via Print@ <job-x@printat.co>"
+  const fm = String(from || '').match(/^\s*(?:"?([^"<]*?)"?\s*)?<?([^<>\s]+@[^<>\s]+)>?\s*$/);
+  const fromAddr = fm && addr(fm[2]) && fm[2].toLowerCase().endsWith('@' + FROM.split('@')[1]) ? addr(fm[2]) : FROM;
+  const fromName = fm && fm[1] && fromAddr !== FROM ? hdr(fm[1]).slice(0, 60) : FROM_NAME;
+  const msg = { from: `${hdr(fromName)} <${fromAddr}>`, to: [to], subject, text };
   if (cc) msg.cc = [cc];
   if (replyTo) msg.reply_to = replyTo;
   if (att) msg.attachments = [{ filename: att.filename, content: att.buffer.toString('base64') }];

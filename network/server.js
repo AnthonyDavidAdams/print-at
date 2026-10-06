@@ -449,7 +449,9 @@ const server = http.createServer(async (req, res) => {
               subject = `Print order: ${j.filename} (${j.pages ? j.pages + ' pp x ' : ''}${j.copies} ${j.copies === 1 ? 'copy' : 'copies'}, ${j.color ? 'color' : 'B&W'})`;
               text = `Hello,\n\nPlease print the attached PDF: ${j.pages ? j.pages + ' pages, ' : ''}${j.copies} ${j.copies === 1 ? 'copy' : 'copies'}, ${j.color ? 'full color' : 'black and white'}, single-sided, standard paper. Pickup name: ${first.customer_name || first.customer_email}.\n\nPlease reply with the price and when it will be ready; your reply reaches the customer directly.\n\nThanks,\n${first.customer_name || 'Print@ customer'}\n\n— Sent via Print@ (printat.co) on the customer's behalf, ref ${ref}. The first page of the attachment is a cover sheet with the pickup name.`;
             }
-            await mail.withAttachment(dest.email, '', subject, text, { filename: j.filename.replace(/[^\w.]+/g, '_'), buffer: buf }, sender, sender);
+            const who = (first.customer_name || '').trim();
+            if (dest.orderStyle) await mail.withAttachment(dest.email, first.customer_email, subject, text, { filename: j.filename.replace(/[^\w.]+/g, '_'), buffer: buf }, first.customer_email, `${who ? who + ' via Print@' : 'Print@'} <${sender}>`);
+            else await mail.withAttachment(dest.email, '', subject, text, { filename: j.filename.replace(/[^\w.]+/g, '_'), buffer: buf }, sender, sender);
             db.setDispatchStatus(ref, 'sent'); db.setJobStatus(j.id, 'done'); results.push({ ok: true, ref, filename: j.filename });
           } catch (e) { db.setDispatchStatus(ref, 'failed'); results.push({ ok: false, ref, filename: j.filename, error: e.message }); console.error('web dispatch:', e.message); }
         }
@@ -544,8 +546,10 @@ const server = http.createServer(async (req, res) => {
         catch (e) { console.error('cover sheet:', e.message); }
       }
       try {
-        await mail.withAttachment(b.to, b.cc || '', b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ for ${dev.email} (ref ${ref}). Just reply to this email and it reaches them.${b.cover !== false ? ' The first page of the attachment is a cover sheet with the pickup name and code.' : ''}`,
-          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: fileBuf }, replyAddr('job', ref));
+        // The shop sees a person, not a service: "Jane Lee via Print@", replies go straight to Jane, and Jane gets a copy.
+        const who = (m.name || dev.name || '').trim();
+        await mail.withAttachment(b.to, b.cc || dev.email, b.subject || `Print order (${ref})`, (b.body || 'Please print the attached document.') + `\n\n— Sent via Print@ (printat.co) for ${who ? who + ', ' : ''}${dev.email} (ref ${ref}). Reply to this email and it reaches them directly.${b.cover !== false ? ' The first page of the attachment is a cover sheet with the pickup name and code.' : ''}`,
+          { filename: (b.filename || 'document.pdf').replace(/[^\w.]+/g, '_'), buffer: fileBuf }, dev.email, `${who ? who + ' via Print@' : 'Print@'} <${replyAddr('job', ref)}>`);
       } catch (e) { db.setDispatchStatus(ref, 'failed'); return json(res, 502, { error: 'send failed: ' + e.message }); }
       db.setDispatchStatus(ref, 'sent');
       return json(res, 200, { ok: true, ref });
