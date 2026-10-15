@@ -44,7 +44,11 @@ class PanelUX {
   }
   action(a) {
     const p = this.pending; this.pending = null;
-    if (p) p(a); else log(`panel action with nothing pending: ${JSON.stringify(a)}`);
+    if (p) return p(a);
+    // Buttons pressed while the agent is busy (searching, researching): take effect at the next checkpoint.
+    if (a.action === 'cancel') { this.job.cancelled = true; log(`job ${this.job.id}: cancelled from the Print@ window`); }
+    else if (a.action === 'relocate') { this.job.relocate = true; log(`job ${this.job.id}: change location requested`); }
+    else log(`panel action with nothing pending: ${JSON.stringify(a)}`);
   }
   status(msg) { this.launch(); this.push({ phase: 'status', status: msg, detail: '', log: [...this.state.log, msg].slice(-8) }); }
   detail(msg) { this.push({ detail: msg, log: [...this.state.log, msg].slice(-8) }); }

@@ -77,73 +77,82 @@ async function run(job, cfg, report = () => {}) {
   const interactive = !cfg.dryRun && spec.delivery !== 'Auto';
   const ux = interactive ? createUX(job, cfg) : null;
   Object.defineProperty(job, 'ux', { value: ux, enumerable: false, writable: true, configurable: true });
-  const check = () => { if (job.cancelled) throw new Error('cancelled from the print queue'); };
+  const check = () => { if (job.cancelled) throw new Error('cancelled from the print queue'); if (job.relocate) { job.relocate = false; const e = new Error('change location'); e.relocate = true; throw e; } };
   const status = msg => { report(msg); if (ux) ux.status(msg); };
   const cancelled = step => { job.result = { status: 'cancelled', step }; return writeReceipt(job, receipt); };
 
   try {
-    // 1. Where are we
-    status('Locating you');
-    let loc;
-    try { loc = await locate(cfg); } catch (e) {
-      if (!ux) throw e;
-      loc = { lat: 0, lon: 0, address: '', source: 'unknown' };
-    }
-    check();
-    // Auto: only ask when the fix is uncertain (IP-only, or nothing at all).
-    const sure = /Location Services|home address|entered/.test(loc.source || '');
-    const needConfirm = !loc.address || spec.confirmLocation === 'Yes' || (spec.confirmLocation === 'Auto' && !sure);
-    if (ux && needConfirm) {
-      report('Waiting for you to confirm the location');
-      for (;;) {
-        const a = await ux.confirmLocation(loc);
-        check();
-        if (a.action === 'cancel') return cancelled('location');
-        if (a.action === 'use' && loc.address) break;
-        if (a.action === 'address' && a.value) {
-          try { loc = await geocode(a.value); break; } catch { loc = { ...loc, address: '', source: `could not find "${a.value}"` }; }
+    let loc, ranked = null, fromMemory = false, forceConfirm = false;
+    for (;;) { // "Change location" in the window brings us back here with the confirm step forced
+      try {
+      // 1. Where are we
+      status('Locating you');
+      try { loc = await locate(cfg); } catch (e) {
+        if (!ux) throw e;
+        loc = { lat: 0, lon: 0, address: '', source: 'unknown' };
+      }
+      check();
+      // Auto: only ask when the fix is uncertain (IP-only, or nothing at all).
+      const sure = /Location Services|home address|entered/.test(loc.source || '') && !loc.check;
+      const needConfirm = forceConfirm || !loc.address || spec.confirmLocation === 'Yes' || (spec.confirmLocation === 'Auto' && !sure);
+      if (ux && needConfirm) {
+        report('Waiting for you to confirm the location');
+        for (;;) {
+          const a = await ux.confirmLocation(loc);
+          check();
+          if (a.action === 'cancel') return cancelled('location');
+          if (a.action === 'use' && loc.address) break;
+          if (a.action === 'address' && a.value) {
+            // Show the address as the map understood it and ask once more, so a typo does not send the job across the state.
+            try { loc = await geocode(a.value); } catch { loc = { ...loc, address: '', source: `could not find "${a.value}"` }; }
+          }
         }
       }
-    }
-    receipt.push(`- Location: ${loc.address} (${loc.source})`);
-    log(`job ${job.id}: location ${loc.address} via ${loc.source}`);
+      receipt.push(`- Location: ${loc.address} (${loc.source})`);
+      log(`job ${job.id}: location ${loc.address} via ${loc.source}`);
 
-    // 2. Reuse the shop used last time from here, unless pinned or told to search again
-    let ranked = null, fromMemory = false;
-    const remembered = job.pin ? null : memory.recall(loc, spec);
-    if (remembered) {
-      ranked = [{ ...remembered.pick, id: remembered.pick.id || 's1' }];
-      fromMemory = true;
-      receipt.push(`- Reused ${remembered.pick.name}, last used ${new Date(remembered.at).toLocaleDateString()} from ${remembered.address}`);
-      status(`Using ${remembered.pick.name} again`);
-    }
+      // 2. Reuse the shop used last time from here, unless pinned or told to search again
+      ranked = null; fromMemory = false;
+      const remembered = job.pin ? null : memory.recall(loc, spec);
+      if (remembered) {
+        ranked = [{ ...remembered.pick, id: remembered.pick.id || 's1' }];
+        fromMemory = true;
+        receipt.push(`- Reused ${remembered.pick.name}, last used ${new Date(remembered.at).toLocaleDateString()} from ${remembered.address}`);
+        status(`Using ${remembered.pick.name} again`);
+      }
 
-    // 3. Otherwise search and rank
-    if (!ranked) {
-      status(`Searching within ${spec.maxDistance} of ${loc.address}`);
-      const candidates = await findCandidates(loc, spec.shopType, spec.maxDistance, job.pin, cfg);
-      check();
-      log(`job ${job.id}: ${candidates.length} candidates`);
-      if (!candidates.length) {
-        const msg = job.pin ? `Could not find "${job.pin}" within 25 miles of ${loc.address}.` : `No print shops found within ${spec.maxDistance} of ${loc.address}. Try a larger search radius in the Print dialog.`;
-        if (ux) await ux.result(msg, [{ key: 'done', label: 'OK' }]);
-        job.result = { status: 'no_candidates' };
-        return writeReceipt(job, receipt);
+      // 3. Otherwise search and rank
+      if (!ranked) {
+        status(`Searching within ${spec.maxDistance} of ${loc.address}`);
+        const candidates = await findCandidates(loc, spec.shopType, spec.maxDistance, job.pin, cfg);
+        check();
+        log(`job ${job.id}: ${candidates.length} candidates`);
+        if (!candidates.length) {
+          const msg = job.pin ? `Could not find "${job.pin}" within 25 miles of ${loc.address}.` : `No print shops found within ${spec.maxDistance} of ${loc.address}. Try a larger search radius in the Print dialog.`;
+          if (ux) await ux.result(msg, [{ key: 'done', label: 'OK' }]);
+          job.result = { status: 'no_candidates' };
+          return writeReceipt(job, receipt);
+        }
+        fs.writeFileSync(path.join(job.dir, 'candidates.json'), JSON.stringify(candidates, null, 2));
+        status(`Checking hours, prices and how to order at ${candidates.length} place${candidates.length === 1 ? '' : 's'} (a minute or two)`);
+        const detail = msg => { check(); report(msg); if (ux) ux.detail(msg); };
+        const ranking = await rank(job, loc, candidates, cfg, detail);
+        check();
+        fs.writeFileSync(path.join(job.dir, 'ranking.json'), JSON.stringify(ranking, null, 2));
+        ranked = ranking.ranked.filter(r => r.score > 0.05);
+        if (job.pinEmail) for (const r of ranked) { r.submit = { method: 'email', email: job.pinEmail, instructions: 'Order email set on this printer' }; r.automatable = true; }
+        if (!ranked.length) {
+          if (ux) await ux.result('None of the nearby shops can take this job. See ranking.json in the job folder for why.', [{ key: 'done', label: 'OK' }]);
+          job.result = { status: 'no_viable' };
+          return writeReceipt(job, receipt);
+        }
+        receipt.push('', '## Ranking', ...ranked.map((r, i) => `${i + 1}. **${r.name}** — ${summary(r)} — ${r.why} — ${methodText(r)}`), '');
       }
-      fs.writeFileSync(path.join(job.dir, 'candidates.json'), JSON.stringify(candidates, null, 2));
-      status(`Checking hours, prices and how to order at ${candidates.length} place${candidates.length === 1 ? '' : 's'} (a minute or two)`);
-      const detail = msg => { report(msg); if (ux) ux.detail(msg); };
-      const ranking = await rank(job, loc, candidates, cfg, detail);
-      check();
-      fs.writeFileSync(path.join(job.dir, 'ranking.json'), JSON.stringify(ranking, null, 2));
-      ranked = ranking.ranked.filter(r => r.score > 0.05);
-      if (job.pinEmail) for (const r of ranked) { r.submit = { method: 'email', email: job.pinEmail, instructions: 'Order email set on this printer' }; r.automatable = true; }
-      if (!ranked.length) {
-        if (ux) await ux.result('None of the nearby shops can take this job. See ranking.json in the job folder for why.', [{ key: 'done', label: 'OK' }]);
-        job.result = { status: 'no_viable' };
-        return writeReceipt(job, receipt);
+        break;
+      } catch (e) {
+        if (!e.relocate) throw e;
+        forceConfirm = true; ranked = null; fromMemory = false; status('Changing location');
       }
-      receipt.push('', '## Ranking', ...ranked.map((r, i) => `${i + 1}. **${r.name}** — ${summary(r)} — ${r.why} — ${methodText(r)}`), '');
     }
 
     // 3b. Print@ cloud: when connected, Print@ Network shops are the best option — the

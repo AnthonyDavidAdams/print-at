@@ -123,7 +123,7 @@ struct ContentView: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
             Spacer()
             QuoteView()
-            HStack { Spacer(); Button("Cancel") { m.send("cancel") } }
+            HStack { Spacer(); Button("Change location") { m.send("relocate") }; Button("Cancel") { m.send("cancel") } }
         }
     }
 

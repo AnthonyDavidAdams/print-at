@@ -22,10 +22,14 @@ async function geocode(address) {
 
 async function byIp() {
   const ctl = AbortSignal.timeout(6000);
-  const res = await fetch('http://ip-api.com/json/?fields=status,lat,lon,city,regionName,zip', { signal: ctl });
+  const res = await fetch('http://ip-api.com/json/?fields=status,lat,lon,city,regionName,zip,isp,org,as,proxy,hosting', { signal: ctl });
   const j = await res.json();
   if (j.status !== 'success') throw new Error('ip-api failed');
-  return { lat: j.lat, lon: j.lon, address: [j.city, j.regionName, j.zip].filter(Boolean).join(', '), source: 'IP address (approximate)' };
+  // Satellite (Starlink geolocates to its ground station, hundreds of miles off), VPNs and
+  // hosting exits say nothing about where the person is.
+  const net = [j.isp, j.org, j.as].filter(Boolean).join(' ');
+  const unreliable = !!(j.proxy || j.hosting) || /starlink|space exploration|spacex|satellite|hughesnet|viasat|vpn|proxy|tunnel|warp|mullvad|nord|express/i.test(net);
+  return { lat: j.lat, lon: j.lon, address: [j.city, j.regionName, j.zip].filter(Boolean).join(', '), source: unreliable ? 'IP address (satellite or VPN exit, probably wrong)' : 'IP address (approximate)', isp: j.isp || '', unreliable, check: unreliable };
 }
 
 function milesBetween(a, b) {
@@ -50,6 +54,9 @@ async function locate(cfg) {
   try {
     const ip = await byIp();
     if (home && milesBetween(ip, home) <= 25) return { ...home, source: `saved home address (IP places you nearby, ${ip.address})` };
+    // Far from home, or a connection that cannot be trusted: the saved home is the better guess,
+    // and the person is asked to confirm (check: true) in case they really are travelling.
+    if (home) return { ...home, source: `saved home address (your connection reports ${ip.address}${ip.unreliable ? ', a satellite or VPN exit' : ', far from home'})`, check: true };
     return ip;
   } catch (e) { log(`IP geolocation failed: ${e.message}`); }
   if (home) return home;
